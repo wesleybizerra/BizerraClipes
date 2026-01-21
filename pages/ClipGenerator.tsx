@@ -34,17 +34,17 @@ const ClipGenerator: React.FC = () => {
     if (user.credits < 10) return navigate('/planos');
 
     setIsProcessing(true);
-    setStatus('Iniciando Protocolo ANTI-BLOCK...');
+    setStatus('Protocolo ANTI-BLOCK Ativado...');
     
     try {
       const statuses = [
-        'Baixando vídeo com Headers de Navegador...',
-        'Simulando tráfego residencial...',
-        'Bypassing YouTube Security...',
-        'Injetando Legendas V2.8...',
-        'Renderizando 10 Clipes Verticais...',
-        'Finalizando processamento pesado...',
-        'Sincronizando sua galeria...'
+        'Baixando vídeo (Protocolo Seguro)...',
+        'Bypassing YouTube Bot Detection...',
+        'Formatando Aspect Ratio 9:16...',
+        'Injetando Legendas Tamanho 20...',
+        'Extraindo 10 Clipes de Alta Retenção...',
+        'Otimizando cores e brilho...',
+        'Finalizando arquivos MP4...'
       ];
 
       let statusIdx = 0;
@@ -53,7 +53,7 @@ const ClipGenerator: React.FC = () => {
           setStatus(statuses[statusIdx]);
           statusIdx++;
         }
-      }, 12000); 
+      }, 10000); 
 
       const generated = await api.generateClips(user.id, videoInput, {
         durationRange: duration,
@@ -65,7 +65,7 @@ const ClipGenerator: React.FC = () => {
       refreshUser();
     } catch (err: any) {
       console.error(err);
-      alert(err.message || "Erro no YouTube. Dica: Tente um vídeo que não seja Shorts ou Live.");
+      alert(err.message || "Erro de conexão. Tente novamente em instantes.");
       navigate('/galeria');
     } finally {
       setIsProcessing(false);
@@ -117,17 +117,15 @@ const ClipGenerator: React.FC = () => {
         <div className="max-w-6xl mx-auto">
           <header className="mb-10">
             <h1 className="text-3xl md:text-5xl font-black">Gerador de Cortes Premium</h1>
-            <p className="text-slate-500 mt-2 font-medium">Motor V2.8 ANTI-BLOCK ativado para máxima compatibilidade.</p>
+            <p className="text-slate-500 mt-2 font-medium">Motor V3.0 ativado com legendas em tamanho 20.</p>
           </header>
 
           {!isProcessing && clips.length === 0 && (
             <div className="bg-slate-900 border border-slate-800 rounded-[40px] p-8 md:p-12 max-w-4xl mx-auto shadow-2xl">
               <div className="space-y-8">
-                <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-2xl">
-                    <p className="text-red-400 text-xs font-bold leading-relaxed">
-                        ⚠️ ATENÇÃO: Se o download falhar, o YouTube bloqueou o acesso temporário. 
-                        Tente vídeos de canais diferentes ou links que não sejam "Shorts".
-                    </p>
+                <div className="bg-green-500/5 border border-green-500/10 p-4 rounded-2xl flex items-center gap-3">
+                   <i className="fa-solid fa-check-circle text-green-500"></i>
+                   <p className="text-green-500/80 text-xs font-bold">Filtro de legendas otimizado para visibilidade total.</p>
                 </div>
 
                 <div>
@@ -176,7 +174,7 @@ const ClipGenerator: React.FC = () => {
                 <div className="pt-4">
                   <button onClick={handleGenerate} className="w-full bg-green-500 text-slate-950 font-black text-2xl py-7 rounded-3xl hover:bg-green-400 transition-all shadow-2xl shadow-green-500/30 flex items-center justify-center gap-4 group">
                     <i className="fa-solid fa-wand-magic-sparkles group-hover:rotate-12 transition-transform"></i>
-                    GERAR 10 CLIPES PREMIUM
+                    GERAR 10 CLIPES (FONTE 20)
                   </button>
                 </div>
               </div>
@@ -190,7 +188,7 @@ const ClipGenerator: React.FC = () => {
                 <i className="fa-solid fa-bolt text-green-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-2xl animate-pulse"></i>
               </div>
               <h2 className="text-3xl md:text-4xl font-black text-green-500 mb-4 animate-pulse">{status}</h2>
-              <p className="text-slate-500 max-w-md mx-auto font-medium italic">O YouTube está muito rígido hoje. Estamos usando protocolos extras para garantir o seu download...</p>
+              <p className="text-slate-500 max-w-md mx-auto font-medium">Estamos redesenhando cada clipe com legendas de tamanho 20 para seu sucesso viral.</p>
             </div>
           )}
 
@@ -205,7 +203,7 @@ const ClipGenerator: React.FC = () => {
                          <i className="fa-solid fa-play ml-1"></i>
                        </button>
                     </div>
-                    <div className="absolute top-5 left-5 bg-green-500 text-slate-950 px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter">Viral #{idx + 1}</div>
+                    <div className="absolute top-5 left-5 bg-green-500 text-slate-950 px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter">Clipe #{idx + 1}</div>
                   </div>
                   <div className="p-5">
                     <h3 className="text-xs font-bold text-white mb-4 line-clamp-2 leading-relaxed">{clip.title}</h3>
