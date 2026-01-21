@@ -22,7 +22,7 @@ if (!fs.existsSync(TEMP_DIR)) {
 app.use('/temp', express.static(TEMP_DIR));
 
 app.get('/health', (req, res) => {
-    res.json({ status: "online", version: "2.1-SPEED-BOOST" });
+    res.json({ status: "online", version: "2.2-DURATION-FLEX" });
 });
 
 const VIRAL_HOOKS = [
@@ -49,45 +49,53 @@ const generateHandler = async (req, res) => {
     console.log(`[JOB] Iniciando geração para ${userId} - Vídeo: ${videoUrl}`);
 
     try {
-        let clipDuration = 60; 
+        let clipDuration = 75; // Default midpoint de 61-90
+        
         if (settings && settings.durationRange) {
-            const [min, max] = settings.durationRange.split('-').map(Number);
-            clipDuration = min || 60;
+            const rangeStr = settings.durationRange; // Ex: '61-90'
+            const [min, max] = rangeStr.split('-').map(Number);
+            
+            if (rangeStr === '60-180') {
+                // Se for a faixa mista, variamos a duração
+                clipDuration = "random"; 
+            } else {
+                // Senão pegamos a média do range para consistência
+                clipDuration = Math.floor((min + max) / 2);
+            }
         }
 
-        // Baixa em 360p/480p para ser MUITO mais rápido e evitar timeouts
         const downloadCmd = `yt-dlp -f "bestvideo[height<=480]+bestaudio/best[height<=480]" --no-check-certificates --merge-output-format mp4 "${videoUrl}" -o "${inputPath}"`;
 
         console.log("[STEP 1] Baixando vídeo...");
         exec(downloadCmd, (error) => {
             if (error) {
                 console.error("[ERROR] Download falhou:", error);
-                return res.status(500).json({ error: "Falha ao baixar o vídeo do YouTube." });
+                return res.status(500).json({ error: "Falha ao baixar o vídeo. Verifique se o link é válido." });
             }
 
-            console.log("[STEP 2] Download concluído. Iniciando renderização de 10 clipes...");
+            console.log("[STEP 2] Download concluído. Iniciando renderização...");
             
             try {
                 const clips = [];
-                const numberOfClips = 10; // Reduzido para garantir que responda a tempo
+                const numberOfClips = 10;
 
                 for (let i = 0; i < numberOfClips; i++) {
-                    const startSec = i * 40; // Espaçamento maior entre cortes
+                    // Calculando tempo de corte individual
+                    let finalDuration = typeof clipDuration === 'number' ? clipDuration : Math.floor(Math.random() * (180 - 60 + 1) + 60);
+                    
+                    const startSec = i * (finalDuration + 10); // Espaçamento dinâmico
                     const timestamp = new Date(startSec * 1000).toISOString().substr(11, 8);
-                    const clipName = `clip_v21_${sessionID}_${i}.mp4`;
+                    const clipName = `clip_v22_${sessionID}_${i}.mp4`;
                     const outputPath = path.join(TEMP_DIR, clipName);
                     
                     const hook = VIRAL_HOOKS[i % VIRAL_HOOKS.length];
                     const color = settings?.subtitleStyle?.color || 'yellow';
                     
-                    // Filtro otimizado: Vertical 9:16 + Cores + Legenda Centralizada
-                    // Removido 'fontfile' específico para usar o padrão do sistema e evitar erros
-                    const complexFilter = `[0:v]crop=ih*9/16:ih,scale=720:1280,eq=brightness=0.05:saturation=1.4:contrast=1.2,drawtext=text='${hook}':fontcolor=${color}:fontsize=40:x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.7:boxborderw=10[v]`;
+                    const complexFilter = `[0:v]crop=ih*9/16:ih,scale=720:1280,eq=brightness=0.06:saturation=1.5:contrast=1.2,drawtext=text='${hook}':fontcolor=${color}:fontsize=38:x=(w-text_w)/2:y=(h-text_h)/2-50:box=1:boxcolor=black@0.7:boxborderw=12[v]`;
                     
-                    // preset=ultrafast e crf=32 para máxima velocidade
-                    const cutCmd = `ffmpeg -ss ${timestamp} -i "${inputPath}" -t ${clipDuration} -filter_complex "${complexFilter}" -map "[v]" -map 0:a -c:v libx264 -preset ultrafast -crf 32 -c:a aac -b:a 128k -y "${outputPath}"`;
+                    const cutCmd = `ffmpeg -ss ${timestamp} -i "${inputPath}" -t ${finalDuration} -filter_complex "${complexFilter}" -map "[v]" -map 0:a -c:v libx264 -preset ultrafast -crf 30 -c:a aac -b:a 128k -y "${outputPath}"`;
                     
-                    console.log(`[RENDER] Processando clipe ${i+1}/${numberOfClips}...`);
+                    console.log(`[RENDER] Clipe ${i+1}/${numberOfClips} (${finalDuration}s)...`);
                     execSync(cutCmd);
                     
                     clips.push({
@@ -95,29 +103,27 @@ const generateHandler = async (req, res) => {
                         title: hook,
                         videoUrl: `/temp/${clipName}`,
                         thumbnail: `https://picsum.photos/seed/${sessionID + i}/400/700`,
-                        duration: clipDuration.toString(),
+                        duration: finalDuration.toString(),
                         startTime: startSec,
-                        endTime: startSec + clipDuration
+                        endTime: startSec + finalDuration
                     });
                 }
 
                 console.log("[SUCCESS] Todos os clipes foram gerados!");
                 res.json({ status: "success", clips });
 
-                // Limpeza do arquivo original após 5 min
                 setTimeout(() => { 
                     if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath); 
-                    console.log(`[CLEANUP] Arquivo fonte ${sessionID} removido.`);
                 }, 300000);
 
             } catch (err) {
                 console.error("[ERRO RENDER]:", err);
-                res.status(500).json({ error: "O servidor demorou muito para processar. Tente um vídeo mais curto." });
+                res.status(500).json({ error: "O processamento de clipes longos falhou ou demorou demais." });
             }
         });
     } catch (e) {
         console.error("[CRITICAL]:", e);
-        res.status(500).json({ error: "Erro crítico no servidor." });
+        res.status(500).json({ error: "Erro interno no servidor." });
     }
 };
 
@@ -126,5 +132,5 @@ app.post('/generate-real-clips', generateHandler);
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[SERVER] Motor de Alta Velocidade V2.1 Ativo na porta ${PORT}`);
+    console.log(`[SERVER] Motor V2.2 Ativo na porta ${PORT}`);
 });
