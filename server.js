@@ -12,7 +12,6 @@ app.use((req, res, next) => {
     next();
 });
 
-// Configuração robusta de CORS para permitir downloads e streaming
 app.use(cors({ 
     origin: '*',
     methods: ['GET', 'POST'],
@@ -25,7 +24,6 @@ if (!fs.existsSync(TEMP_DIR)) {
     fs.mkdirSync(TEMP_DIR, { recursive: true });
 }
 
-// Servir arquivos estáticos com suporte a Range Requests (importante para vídeo)
 app.use('/temp', express.static(TEMP_DIR, {
     setHeaders: (res, path) => {
         if (path.endsWith('.mp4')) {
@@ -36,7 +34,7 @@ app.use('/temp', express.static(TEMP_DIR, {
 }));
 
 app.get('/health', (req, res) => {
-    res.json({ status: "online", version: "2.3-FIXED-PLAYBACK" });
+    res.json({ status: "online", version: "2.4-HEAVY-LOAD-OPTIMIZED" });
 });
 
 const VIRAL_HOOKS = [
@@ -63,47 +61,66 @@ const generateHandler = async (req, res) => {
     console.log(`[JOB] Iniciando geração para ${userId} - Vídeo: ${videoUrl}`);
 
     try {
-        let clipDuration = 75; 
+        let minDur = 61, maxDur = 90;
+        let isRandom = false;
         
         if (settings && settings.durationRange) {
-            const rangeStr = settings.durationRange;
-            const [min, max] = rangeStr.split('-').map(Number);
-            clipDuration = rangeStr === '60-180' ? "random" : Math.floor((min + max) / 2);
+            if (settings.durationRange === '60-180') {
+                isRandom = true;
+                minDur = 60;
+                maxDur = 180;
+            } else {
+                const parts = settings.durationRange.split('-').map(Number);
+                minDur = parts[0];
+                maxDur = parts[1];
+            }
         }
 
-        const downloadCmd = `yt-dlp -f "bestvideo[height<=480]+bestaudio/best[height<=480]" --no-check-certificates --merge-output-format mp4 "${videoUrl}" -o "${inputPath}"`;
+        // Primeiro, baixar o vídeo e obter a duração total
+        console.log("[STEP 1] Analisando e baixando vídeo...");
+        const downloadCmd = `yt-dlp -f "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]" --no-check-certificates --merge-output-format mp4 "${videoUrl}" -o "${inputPath}"`;
 
-        console.log("[STEP 1] Baixando vídeo...");
         exec(downloadCmd, (error) => {
             if (error) {
                 console.error("[ERROR] Download falhou:", error);
-                return res.status(500).json({ error: "Falha ao baixar o vídeo." });
+                return res.status(500).json({ error: "Falha ao baixar vídeo do YouTube. Verifique o link." });
             }
 
-            console.log("[STEP 2] Download concluído. Iniciando renderização compatível...");
-            
             try {
+                // Obter duração real do vídeo baixado
+                const durationInfo = execSync(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${inputPath}"`).toString().trim();
+                const totalVideoDuration = parseFloat(durationInfo);
+                console.log(`[INFO] Duração total do vídeo original: ${totalVideoDuration}s`);
+
                 const clips = [];
-                const numberOfClips = 10;
+                const numberOfClips = isRandom ? 6 : 10; // Reduzir para 6 se for aleatório longo para evitar timeout extremo
 
                 for (let i = 0; i < numberOfClips; i++) {
-                    let finalDuration = typeof clipDuration === 'number' ? clipDuration : Math.floor(Math.random() * (180 - 60 + 1) + 60);
+                    let finalDuration = isRandom 
+                        ? Math.floor(Math.random() * (maxDur - minDur + 1) + minDur)
+                        : Math.floor((minDur + maxDur) / 2);
                     
-                    const startSec = i * (finalDuration + 5);
+                    // Garantir que não tentamos cortar além do final do vídeo
+                    let startSec = i * (finalDuration + 2);
+                    if (startSec + finalDuration > totalVideoDuration) {
+                        // Se ultrapassar, tenta pegar do final pra trás ou ajustar
+                        startSec = Math.max(0, totalVideoDuration - finalDuration - (i * 2));
+                    }
+
                     const timestamp = new Date(startSec * 1000).toISOString().substr(11, 8);
-                    const clipName = `clip_v23_${sessionID}_${i}.mp4`;
+                    const clipName = `clip_v24_${sessionID}_${i}.mp4`;
                     const outputPath = path.join(TEMP_DIR, clipName);
                     
                     const hook = VIRAL_HOOKS[i % VIRAL_HOOKS.length];
                     const color = settings?.subtitleStyle?.color || 'yellow';
                     
-                    // Filtro com drawtext robusto
-                    const complexFilter = `[0:v]crop=ih*9/16:ih,scale=720:1280,eq=brightness=0.06:saturation=1.5:contrast=1.2,drawtext=text='${hook}':fontcolor=${color}:fontsize=36:x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.6:boxborderw=10[v]`;
+                    // Filtro otimizado: Reduzi um pouco o brilho e aumentei o contraste para vídeos longos não ficarem "lavados"
+                    const complexFilter = `[0:v]crop=ih*9/16:ih,scale=540:960,eq=brightness=0.04:saturation=1.4:contrast=1.2,drawtext=text='${hook}':fontcolor=${color}:fontsize=30:x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.5:boxborderw=8[v]`;
                     
-                    // CRÍTICO: pix_fmt yuv420p e movflags +faststart para garantir que funcione em qualquer celular/PC
-                    const cutCmd = `ffmpeg -ss ${timestamp} -i "${inputPath}" -t ${finalDuration} -filter_complex "${complexFilter}" -map "[v]" -map 0:a? -c:v libx264 -preset ultrafast -crf 28 -pix_fmt yuv420p -movflags +faststart -c:a aac -b:a 128k -y "${outputPath}"`;
+                    // COMANDO OTIMIZADO: Resolução reduzida para 540x960 e CRF 32 para renderizar vídeos de 3 minutos mais rápido
+                    const cutCmd = `ffmpeg -ss ${timestamp} -i "${inputPath}" -t ${finalDuration} -filter_complex "${complexFilter}" -map "[v]" -map 0:a? -c:v libx264 -preset ultrafast -crf 32 -pix_fmt yuv420p -movflags +faststart -c:a aac -b:a 96k -y "${outputPath}"`;
                     
-                    console.log(`[RENDER] Clipe ${i+1}/${numberOfClips} (${finalDuration}s)...`);
+                    console.log(`[RENDER] Clipe ${i+1}/${numberOfClips} (${finalDuration}s) iniciando em ${timestamp}...`);
                     execSync(cutCmd);
                     
                     clips.push({
@@ -117,21 +134,22 @@ const generateHandler = async (req, res) => {
                     });
                 }
 
-                console.log("[SUCCESS] Clipes compatíveis gerados!");
+                console.log("[SUCCESS] Geração concluída com sucesso!");
                 res.json({ status: "success", clips });
 
+                // Limpeza após 10 minutos
                 setTimeout(() => { 
                     if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath); 
-                }, 300000);
+                }, 600000);
 
             } catch (err) {
-                console.error("[ERRO RENDER]:", err);
-                res.status(500).json({ error: "Erro na renderização. Tente novamente." });
+                console.error("[ERRO NO PROCESSO]:", err);
+                res.status(500).json({ error: "O vídeo original é curto demais para a duração escolhida ou o servidor ficou sem memória. Tente durações menores." });
             }
         });
     } catch (e) {
         console.error("[CRITICAL]:", e);
-        res.status(500).json({ error: "Erro interno no servidor." });
+        res.status(500).json({ error: "Erro crítico no processamento." });
     }
 };
 
@@ -140,5 +158,5 @@ app.post('/generate-real-clips', generateHandler);
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[SERVER] Motor V2.3 (COMPATIBILIDADE TOTAL) Ativo na porta ${PORT}`);
+    console.log(`[SERVER] Motor V2.4 (OTIMIZAÇÃO PESADA) Ativo na porta ${PORT}`);
 });
