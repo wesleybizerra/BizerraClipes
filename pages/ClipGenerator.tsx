@@ -34,18 +34,18 @@ const ClipGenerator: React.FC = () => {
     if (user.credits < 10) return navigate('/planos');
 
     setIsProcessing(true);
-    setStatus('Iniciando Motor V3.4...');
+    setStatus('Iniciando Motor V4.0...');
     
     try {
       const statuses = [
-        'Limpando arquivos temporários...',
-        'Conectando ao YouTube (Proxy Seguro)...',
-        'Convertendo para Formato Vertical...',
+        'Ativando Anti-Block V4.0...',
+        'Injetando Cookies de Autenticação...',
+        'Simulando Tráfego Residencial...',
+        'Extraindo vídeo do YouTube...',
         'Reduzindo Legendas para Tamanho 13...',
-        'Ajustando visibilidade do texto...',
         'Processando cortes virais...',
-        'Finalizando codificação UltraFast...',
-        'Pack de 10 clipes em fase final...'
+        'Codificando UltraFast MP4...',
+        'Finalizando pack de 10 clipes...'
       ];
 
       let statusIdx = 0;
@@ -66,8 +66,7 @@ const ClipGenerator: React.FC = () => {
       refreshUser();
     } catch (err: any) {
       console.error(err);
-      alert(err.message || "Erro no processamento. O servidor está tentando um novo IP automaticamente.");
-      navigate('/galeria');
+      alert(err.message);
     } finally {
       setIsProcessing(false);
       setStatus('');
@@ -117,8 +116,11 @@ const ClipGenerator: React.FC = () => {
       <main className="flex-grow p-6 md:p-10 transition-all duration-300 md:ml-72">
         <div className="max-w-6xl mx-auto">
           <header className="mb-10">
-            <h1 className="text-3xl md:text-5xl font-black tracking-tight">Cortes Inteligentes V3.4</h1>
-            <p className="text-slate-500 mt-2 font-medium">Design Ultra-Clean: Legendas e Textos fixados no tamanho 13.</p>
+            <div className="flex items-center gap-4">
+               <h1 className="text-3xl md:text-5xl font-black tracking-tight">Motor V4.0 (Pro)</h1>
+               <span className="bg-green-500 text-slate-950 text-[10px] font-black px-3 py-1 rounded-full uppercase">Anti-Block</span>
+            </div>
+            <p className="text-slate-500 mt-2 font-medium">Processamento blindado contra bloqueios do YouTube.</p>
           </header>
 
           {!isProcessing && clips.length === 0 && (
@@ -127,21 +129,20 @@ const ClipGenerator: React.FC = () => {
                 <div>
                   <label className="block text-xl font-black mb-4 flex items-center gap-2">
                     <i className="fa-brands fa-youtube text-red-500 text-2xl"></i>
-                    Cole o link do YouTube
+                    URL do Vídeo
                   </label>
                   <input 
                     type="text"
-                    placeholder="https://www.youtube.com/watch?v=..."
+                    placeholder="Cole o link do YouTube aqui..."
                     className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-6 py-6 focus:ring-2 focus:ring-green-500/50 outline-none transition text-lg font-medium"
                     value={videoInput}
                     onChange={e => setVideoInput(e.target.value)}
                   />
-                  <p className="text-slate-500 text-xs mt-3 px-2">Configurado: Texto reduzido para 13 para máxima área visível do vídeo.</p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div>
-                    <label className="block text-sm font-bold text-slate-400 mb-4 uppercase tracking-widest">Duração</label>
+                    <label className="block text-sm font-bold text-slate-400 mb-4 uppercase tracking-widest">Duração do Corte</label>
                     <div className="grid grid-cols-2 gap-2">
                       {durationOptions.slice(0, 4).map(opt => (
                         <button 
@@ -156,7 +157,7 @@ const ClipGenerator: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-bold text-slate-400 mb-4 uppercase tracking-widest">Cor das Letras (Fonte 13)</label>
+                    <label className="block text-sm font-bold text-slate-400 mb-4 uppercase tracking-widest">Estilo das Legendas (Font 13)</label>
                     <div className="flex gap-3">
                       {['yellow', 'cyan', 'white', '#ff0055'].map(c => (
                         <button 
@@ -172,8 +173,8 @@ const ClipGenerator: React.FC = () => {
 
                 <div className="pt-4">
                   <button onClick={handleGenerate} className="w-full bg-green-500 text-slate-950 font-black text-2xl py-7 rounded-3xl hover:bg-green-400 transition-all shadow-2xl shadow-green-500/30 flex items-center justify-center gap-4 group">
-                    <i className="fa-solid fa-wand-magic-sparkles group-hover:rotate-12 transition-transform"></i>
-                    CRIAR COM FONTE 13
+                    <i className="fa-solid fa-shield-halved group-hover:rotate-12 transition-transform"></i>
+                    GERAR AGORA (BLINDADO)
                   </button>
                 </div>
               </div>
@@ -187,7 +188,7 @@ const ClipGenerator: React.FC = () => {
                 <i className="fa-solid fa-bolt text-green-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-2xl animate-pulse"></i>
               </div>
               <h2 className="text-3xl md:text-4xl font-black text-white mb-4">{status}</h2>
-              <p className="text-slate-500 max-w-md mx-auto font-medium">Implementando design de alto nível com fonte tamanho 13. Seus clipes ficarão idênticos aos dos maiores canais de cortes.</p>
+              <p className="text-slate-500 max-w-md mx-auto font-medium">O motor V4.0 está usando sessões autenticadas para garantir que o YouTube não bloqueie seu processo.</p>
             </div>
           )}
 
