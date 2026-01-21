@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
@@ -27,6 +28,9 @@ const ClipGenerator: React.FC = () => {
 
   const handleGenerate = async () => {
     if (!videoInput) return alert("Insira um link do YouTube");
+    if (!videoInput.includes('youtube.com') && !videoInput.includes('youtu.be')) {
+        return alert("Por favor, insira um link válido do YouTube.");
+    }
     if (user.credits < 10) return navigate('/planos');
 
     setIsProcessing(true);
@@ -34,13 +38,13 @@ const ClipGenerator: React.FC = () => {
     
     try {
       const statuses = [
-        'Baixando vídeo (Alta Velocidade)...',
-        'Configurando Formato 9:16 Vertical...',
-        'Injetando Legendas Coloridas e Hooks...',
-        'Renderizando Clipes (Isso pode levar alguns minutos)...',
-        'Processando cortes longos e áudio...',
-        'Finalizando arquivos MP4 de alta retenção...',
-        'Quase pronto! Sincronizando sua galeria...'
+        'Baixando vídeo (Protocolo Seguro)...',
+        'Bypassing bot detection...',
+        'Injetando Legendas Coloridas (Tam 18)...',
+        'Extraindo 10 Clipes Virais...',
+        'Renderizando arquivos de alta retenção...',
+        'Finalizando processamento...',
+        'Sincronizando sua galeria...'
       ];
 
       let statusIdx = 0;
@@ -49,18 +53,19 @@ const ClipGenerator: React.FC = () => {
           setStatus(statuses[statusIdx]);
           statusIdx++;
         }
-      }, 20000); // Maior intervalo pois clipes longos demoram mais
+      }, 15000); 
 
       const generated = await api.generateClips(user.id, videoInput, {
         durationRange: duration,
-        subtitleStyle: { color: subtitleColor, size: 'large', hasShadow: true }
+        subtitleStyle: { color: subtitleColor, size: 'medium', hasShadow: true }
       });
       
       clearInterval(interval);
       setClips(generated);
       refreshUser();
     } catch (err: any) {
-      alert(err.message || "Ocorreu um erro. Verifique sua Galeria em alguns minutos.");
+      console.error(err);
+      alert(err.message || "Erro de servidor. Tente outro vídeo ou aguarde alguns minutos.");
       navigate('/galeria');
     } finally {
       setIsProcessing(false);
@@ -112,7 +117,7 @@ const ClipGenerator: React.FC = () => {
         <div className="max-w-6xl mx-auto">
           <header className="mb-10">
             <h1 className="text-3xl md:text-5xl font-black">Gerador de Cortes Premium</h1>
-            <p className="text-slate-500 mt-2 font-medium">Escolha a duração e deixe a IA criar seus clipes virais.</p>
+            <p className="text-slate-500 mt-2 font-medium">Extração de 10 clipes automáticos com legendas virais.</p>
           </header>
 
           {!isProcessing && clips.length === 0 && (
@@ -121,7 +126,7 @@ const ClipGenerator: React.FC = () => {
                 <div>
                   <label className="block text-xl font-black mb-4 flex items-center gap-2">
                     <i className="fa-brands fa-youtube text-red-500"></i>
-                    Link do Vídeo
+                    Link do Vídeo (YouTube)
                   </label>
                   <input 
                     type="text"
@@ -148,7 +153,7 @@ const ClipGenerator: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-bold text-slate-400 mb-4 uppercase tracking-widest">Cor das Legendas Emocionais</label>
+                  <label className="block text-sm font-bold text-slate-400 mb-4 uppercase tracking-widest">Cor das Legendas</label>
                   <div className="flex gap-4">
                     {['yellow', 'cyan', 'lime', 'white', '#ff0055'].map(c => (
                       <button 
@@ -166,10 +171,6 @@ const ClipGenerator: React.FC = () => {
                     <i className="fa-solid fa-wand-magic-sparkles group-hover:rotate-12 transition-transform"></i>
                     GERAR 10 CLIPES PREMIUM
                   </button>
-                  <p className="text-center text-slate-500 text-xs mt-6 font-medium">
-                    <i className="fa-solid fa-circle-info mr-1 text-green-500/50"></i>
-                    Custo da geração: 10 créditos. Clipes de até 3 minutos exigem processamento intensivo.
-                  </p>
                 </div>
               </div>
             </div>
@@ -182,14 +183,14 @@ const ClipGenerator: React.FC = () => {
                 <i className="fa-solid fa-bolt text-green-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-2xl animate-pulse"></i>
               </div>
               <h2 className="text-3xl md:text-4xl font-black text-green-500 mb-4 animate-pulse">{status}</h2>
-              <p className="text-slate-500 max-w-md mx-auto font-medium">Estamos aplicando filtros de cor viral e legendas persuasivas. Isso pode levar de 3 a 8 minutos para clipes longos.</p>
+              <p className="text-slate-500 max-w-md mx-auto font-medium">Isso pode levar de 5 a 10 minutos para gerar os 10 clipes. Não feche esta aba.</p>
             </div>
           )}
 
           {clips.length > 0 && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 animate-in fade-in duration-700">
               {clips.map((clip, idx) => (
-                <div key={clip.id} className="bg-slate-900 border border-slate-800 rounded-[32px] overflow-hidden group hover:border-green-500/40 transition-all hover:shadow-2xl hover:shadow-green-500/5">
+                <div key={clip.id} className="bg-slate-900 border border-slate-800 rounded-[32px] overflow-hidden group hover:border-green-500/40 transition-all">
                   <div className="aspect-[9/16] relative bg-black">
                     <img src={clip.thumbnail} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition duration-500" />
                     <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition bg-black/40 backdrop-blur-[2px]">
@@ -198,7 +199,6 @@ const ClipGenerator: React.FC = () => {
                        </button>
                     </div>
                     <div className="absolute top-5 left-5 bg-green-500 text-slate-950 px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter">Viral #{idx + 1}</div>
-                    <div className="absolute bottom-5 right-5 bg-black/80 px-2 py-1 rounded text-[9px] font-bold">{clip.duration}s</div>
                   </div>
                   <div className="p-5">
                     <h3 className="text-xs font-bold text-white mb-4 line-clamp-2 leading-relaxed">{clip.title}</h3>
