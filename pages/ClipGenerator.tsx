@@ -9,7 +9,7 @@ const ClipGenerator: React.FC = () => {
   const { user, refreshUser } = useAuth();
   const [videoInput, setVideoInput] = useState('');
   const [duration, setDuration] = useState<GenerationSettings['durationRange']>('120-150');
-  const [subtitleColor, setSubtitleColor] = useState('yellow');
+  const [subtitleColor, setSubtitleColor] = useState('white');
   const [isProcessing, setIsProcessing] = useState(false);
   const [clips, setClips] = useState<Clip[]>([]);
   const [status, setStatus] = useState('');
@@ -31,18 +31,17 @@ const ClipGenerator: React.FC = () => {
     if (user.credits < 10) return navigate('/planos');
 
     setIsProcessing(true);
-    setStatus('Iniciando Motor V4.5 (Precision UI)...');
+    setStatus('Ativando Motor V5.0...');
     
     try {
       const statuses = [
-        'Ativando Anti-Block V4.5...',
-        'Injetando Cookies de Sessão...',
-        'Configurando Fonte Tamanho 13...',
-        'Ativando Quebra de Linha (Auto-Wrap)...',
-        'Extraindo vídeo do YouTube...',
-        'Sincronizando áudio e cortes...',
-        'Renderizando Legendas Precision...',
-        'Finalizando Clipes MP4...'
+        'Limpando área central do vídeo...',
+        'Removendo textos antigos...',
+        'Configurando Fonte 13 (Rodapé)...',
+        'Iniciando Processamento Minimalista...',
+        'Extraindo do YouTube...',
+        'Sincronizando áudio e imagem...',
+        'Gerando pack de 10 clipes...'
       ];
 
       let statusIdx = 0;
@@ -51,7 +50,7 @@ const ClipGenerator: React.FC = () => {
           setStatus(statuses[statusIdx]);
           statusIdx++;
         }
-      }, 7000); 
+      }, 5000); 
 
       const generated = await api.generateClips(user.id, videoInput, {
         durationRange: duration,
@@ -103,18 +102,20 @@ const ClipGenerator: React.FC = () => {
       <main className="flex-grow p-6 md:p-10 transition-all duration-300 md:ml-72">
         <div className="max-w-6xl mx-auto">
           <header className="mb-10">
-            <h1 className="text-3xl md:text-5xl font-black tracking-tight">Cortes V4.5 (Fonte 13)</h1>
-            <p className="text-slate-500 mt-2 font-medium">Sistema com quebra de linha inteligente para legibilidade total.</p>
+            <h1 className="text-3xl md:text-5xl font-black tracking-tight flex items-center gap-3">
+               Motor V5.0 <span className="bg-white/10 text-white text-[10px] px-3 py-1 rounded-full border border-white/20 uppercase">Clean UI</span>
+            </h1>
+            <p className="text-slate-500 mt-2 font-medium">Sem poluição visual. Legendas profissionais no rodapé com fonte 13.</p>
           </header>
 
           {!isProcessing && clips.length === 0 && (
             <div className="bg-slate-900 border border-slate-800 rounded-[40px] p-8 md:p-12 max-w-4xl mx-auto shadow-2xl">
               <div className="space-y-8">
                 <div>
-                  <label className="block text-xl font-black mb-4 flex items-center gap-2">Link do Vídeo</label>
+                  <label className="block text-xl font-black mb-4 flex items-center gap-2">YouTube URL</label>
                   <input 
                     type="text"
-                    placeholder="Cole o link do YouTube..."
+                    placeholder="https://youtube.com/watch?v=..."
                     className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-6 py-6 outline-none transition text-lg font-medium"
                     value={videoInput}
                     onChange={e => setVideoInput(e.target.value)}
@@ -123,7 +124,7 @@ const ClipGenerator: React.FC = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div>
-                    <label className="block text-sm font-bold text-slate-400 mb-4 uppercase tracking-widest">Tempo do Corte</label>
+                    <label className="block text-sm font-bold text-slate-400 mb-4 uppercase tracking-widest">Duração</label>
                     <div className="grid grid-cols-2 gap-2">
                       {durationOptions.map(opt => (
                         <button 
@@ -138,13 +139,13 @@ const ClipGenerator: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-bold text-slate-400 mb-4 uppercase tracking-widest">Cor (Fonte 13 + Wrap)</label>
+                    <label className="block text-sm font-bold text-slate-400 mb-4 uppercase tracking-widest">Cor da Legenda (13px)</label>
                     <div className="flex gap-3">
-                      {['yellow', 'cyan', 'white', '#ff0055'].map(c => (
+                      {['white', 'yellow', '#4ade80', '#00e5ff'].map(c => (
                         <button 
                           key={c} 
                           onClick={() => setSubtitleColor(c)} 
-                          className={`w-10 h-10 rounded-xl border-2 ${subtitleColor === c ? 'border-white scale-110' : 'border-transparent opacity-40'}`} 
+                          className={`w-10 h-10 rounded-xl border-2 transition-all ${subtitleColor === c ? 'border-white scale-110 shadow-lg' : 'border-transparent opacity-40'}`} 
                           style={{ backgroundColor: c }} 
                         />
                       ))}
@@ -153,9 +154,9 @@ const ClipGenerator: React.FC = () => {
                 </div>
 
                 <div className="pt-4">
-                  <button onClick={handleGenerate} className="w-full bg-green-500 text-slate-950 font-black text-2xl py-7 rounded-3xl hover:bg-green-400 transition-all shadow-2xl shadow-green-500/30 flex items-center justify-center gap-4">
-                    <i className="fa-solid fa-check-double"></i>
-                    GERAR COM FONTE 13
+                  <button onClick={handleGenerate} className="w-full bg-white text-slate-950 font-black text-2xl py-7 rounded-3xl hover:bg-slate-200 transition-all shadow-2xl flex items-center justify-center gap-4">
+                    <i className="fa-solid fa-magic"></i>
+                    GERAR CLIPES CLEAN
                   </button>
                 </div>
               </div>
@@ -164,16 +165,16 @@ const ClipGenerator: React.FC = () => {
 
           {isProcessing && (
             <div className="flex flex-col items-center justify-center min-h-[50vh] text-center">
-              <div className="w-24 h-24 border-[8px] border-slate-800 border-t-green-500 rounded-full animate-spin mb-8"></div>
-              <h2 className="text-3xl font-black text-white mb-4">{status}</h2>
-              <p className="text-slate-500 font-medium">Ajustando cada palavra para o tamanho 13 perfeito.</p>
+              <div className="w-24 h-24 border-[8px] border-slate-800 border-t-white rounded-full animate-spin mb-8"></div>
+              <h2 className="text-3xl font-black text-white mb-4 tracking-tighter uppercase">{status}</h2>
+              <p className="text-slate-500 font-medium">Focando no conteúdo e na legibilidade das legendas 13px.</p>
             </div>
           )}
 
           {clips.length > 0 && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
               {clips.map((clip) => (
-                <div key={clip.id} className="bg-slate-900 border border-slate-800 rounded-[32px] overflow-hidden group">
+                <div key={clip.id} className="bg-slate-900 border border-slate-800 rounded-[32px] overflow-hidden group hover:border-white transition-all">
                   <div className="aspect-[9/16] relative bg-black">
                     <img src={clip.thumbnail} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition" />
                     <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
@@ -183,10 +184,14 @@ const ClipGenerator: React.FC = () => {
                     </div>
                   </div>
                   <div className="p-5">
-                    <h3 className="text-[11px] font-bold text-white mb-4 uppercase">{clip.title}</h3>
-                    <a href={clip.videoUrl} download className="w-full bg-slate-950 hover:bg-green-500 hover:text-slate-950 text-white font-black py-4 rounded-2xl transition text-[10px] border border-slate-800 flex items-center justify-center gap-2">
-                      <i className="fa-solid fa-cloud-arrow-down"></i> BAIXAR MP4
-                    </a>
+                    <button onClick={() => {
+                        const a = document.createElement('a');
+                        a.href = clip.videoUrl;
+                        a.download = `clipe_bizerra.mp4`;
+                        a.click();
+                    }} className="w-full bg-slate-950 hover:bg-white hover:text-slate-950 text-white font-black py-4 rounded-2xl transition text-[10px] border border-slate-800 flex items-center justify-center gap-2">
+                      <i className="fa-solid fa-download"></i> BAIXAR MP4
+                    </button>
                   </div>
                 </div>
               ))}
