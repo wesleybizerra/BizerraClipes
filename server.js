@@ -34,7 +34,7 @@ app.use('/temp', express.static(TEMP_DIR, {
 }));
 
 app.get('/health', (req, res) => {
-    res.json({ status: "online", version: "2.5-TEXT-FIX-10-CLIPS" });
+    res.json({ status: "online", version: "2.6-ROBUST-DOWNLOAD" });
 });
 
 const VIRAL_HOOKS = [
@@ -58,7 +58,7 @@ const generateHandler = async (req, res) => {
     const sessionID = Date.now();
     const inputPath = path.join(TEMP_DIR, `source_${sessionID}.mp4`);
     
-    console.log(`[JOB] Iniciando geração de 10 clipes para ${userId}`);
+    console.log(`[JOB] Iniciando geração ROBUSTA para ${userId}`);
 
     try {
         let minDur = 61, maxDur = 90;
@@ -76,13 +76,14 @@ const generateHandler = async (req, res) => {
             }
         }
 
-        console.log("[STEP 1] Analisando e baixando vídeo...");
-        const downloadCmd = `yt-dlp -f "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]" --no-check-certificates --merge-output-format mp4 "${videoUrl}" -o "${inputPath}"`;
+        console.log("[STEP 1] Baixando vídeo com compatibilidade total...");
+        // Comando simplificado para baixar o melhor vídeo disponível (até 480p) e forçar MP4 no merge
+        const downloadCmd = `yt-dlp -f "bestvideo[height<=480]+bestaudio/best[height<=480]" --no-playlist --no-check-certificates --merge-output-format mp4 "${videoUrl}" -o "${inputPath}"`;
 
-        exec(downloadCmd, (error) => {
+        exec(downloadCmd, (error, stdout, stderr) => {
             if (error) {
-                console.error("[ERROR] Download falhou:", error);
-                return res.status(500).json({ error: "Falha ao baixar vídeo. Verifique o link." });
+                console.error("[ERROR] yt-dlp falhou:", stderr);
+                return res.status(500).json({ error: "O YouTube bloqueou o download ou o link é inválido. Tente outro vídeo." });
             }
 
             try {
@@ -90,38 +91,34 @@ const generateHandler = async (req, res) => {
                 const totalVideoDuration = parseFloat(durationInfo);
                 
                 const clips = [];
-                const numberOfClips = 10; // FIXO: Sempre 10 clipes
+                const numberOfClips = 10; 
 
                 for (let i = 0; i < numberOfClips; i++) {
                     let finalDuration = isRandom 
                         ? Math.floor(Math.random() * (maxDur - minDur + 1) + minDur)
                         : Math.floor((minDur + maxDur) / 2);
                     
-                    // Lógica de distribuição inteligente: tenta espalhar os 10 clipes pelo vídeo
                     let gap = (totalVideoDuration - finalDuration) / (numberOfClips - 1);
                     if (gap < 0) gap = 0;
                     
                     let startSec = i * gap;
-                    
-                    // Fallback de segurança se o vídeo for muito curto para o gap calculado
                     if (startSec + finalDuration > totalVideoDuration) {
                         startSec = Math.max(0, totalVideoDuration - finalDuration);
                     }
 
                     const timestamp = new Date(startSec * 1000).toISOString().substr(11, 8);
-                    const clipName = `clip_v25_${sessionID}_${i}.mp4`;
+                    const clipName = `clip_v26_${sessionID}_${i}.mp4`;
                     const outputPath = path.join(TEMP_DIR, clipName);
                     
                     const hook = VIRAL_HOOKS[i % VIRAL_HOOKS.length];
                     const color = settings?.subtitleStyle?.color || 'yellow';
                     
-                    // AJUSTE: fontsize reduzido para 22 para caber em 540px de largura sem transbordar
-                    // boxborderw reduzido para 6 para manter a proporção
-                    const complexFilter = `[0:v]crop=ih*9/16:ih,scale=540:960,eq=brightness=0.04:saturation=1.4:contrast=1.2,drawtext=text='${hook}':fontcolor=${color}:fontsize=22:x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.6:boxborderw=6[v]`;
+                    // AJUSTE FINAL FONTE: Reduzido para 18 para garantir que não passe da borda em 540px
+                    const complexFilter = `[0:v]crop=ih*9/16:ih,scale=540:960,eq=brightness=0.04:saturation=1.4:contrast=1.2,drawtext=text='${hook}':fontcolor=${color}:fontsize=18:x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.6:boxborderw=5[v]`;
                     
                     const cutCmd = `ffmpeg -ss ${timestamp} -i "${inputPath}" -t ${finalDuration} -filter_complex "${complexFilter}" -map "[v]" -map 0:a? -c:v libx264 -preset ultrafast -crf 30 -pix_fmt yuv420p -movflags +faststart -c:a aac -b:a 128k -y "${outputPath}"`;
                     
-                    console.log(`[RENDER] Clipe ${i+1}/10 (${finalDuration}s) em ${timestamp}`);
+                    console.log(`[RENDER] Clipe ${i+1}/10...`);
                     execSync(cutCmd);
                     
                     clips.push({
@@ -142,13 +139,13 @@ const generateHandler = async (req, res) => {
                 }, 900000);
 
             } catch (err) {
-                console.error("[ERRO]:", err);
-                res.status(500).json({ error: "O vídeo é muito curto para gerar 10 clipes dessa duração ou o servidor sobrecarregou. Tente um vídeo mais longo." });
+                console.error("[ERRO RENDER]:", err);
+                res.status(500).json({ error: "Erro ao processar o arquivo de vídeo. Tente um vídeo mais longo ou de outro canal." });
             }
         });
     } catch (e) {
         console.error("[CRITICAL]:", e);
-        res.status(500).json({ error: "Erro crítico no servidor." });
+        res.status(500).json({ error: "Erro interno no servidor." });
     }
 };
 
@@ -157,5 +154,5 @@ app.post('/generate-real-clips', generateHandler);
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[SERVER] Motor V2.5 (SUBTITLE FIX) Ativo`);
+    console.log(`[SERVER] Motor V2.6 (ULTRA COMPATIBILIDADE) Ativo`);
 });
