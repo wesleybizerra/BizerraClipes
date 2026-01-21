@@ -17,6 +17,14 @@ const ClipGenerator: React.FC = () => {
 
   if (!user) return null;
 
+  const durationOptions: { label: string; value: GenerationSettings['durationRange'] }[] = [
+    { label: '61 a 90s', value: '61-90' },
+    { label: '90 a 120s', value: '90-120' },
+    { label: '120 a 150s', value: '120-150' },
+    { label: '150 a 180s', value: '150-180' },
+    { label: '60 a 180s (Misto)', value: '60-180' },
+  ];
+
   const handleGenerate = async () => {
     if (!videoInput) return alert("Insira um link do YouTube");
     if (user.credits < 10) return navigate('/planos');
@@ -26,14 +34,13 @@ const ClipGenerator: React.FC = () => {
     
     try {
       const statuses = [
-        'Baixando vídeo do YouTube (Alta Velocidade)...',
-        'Copiando para o Motor de Renderização...',
-        'Formatando Vertical 9:16...',
-        'Injetando Legendas Coloridas e Hooks Emocionais...',
-        'Processando Clipes 1 a 5...',
-        'Processando Clipes 6 a 10...',
-        'Finalizando e gerando arquivos MP4...',
-        'Quase lá! Sincronizando com sua Galeria...'
+        'Baixando vídeo (Alta Velocidade)...',
+        'Configurando Formato 9:16 Vertical...',
+        'Injetando Legendas Coloridas e Hooks...',
+        'Renderizando Clipes (Isso pode levar alguns minutos)...',
+        'Processando cortes longos e áudio...',
+        'Finalizando arquivos MP4 de alta retenção...',
+        'Quase pronto! Sincronizando sua galeria...'
       ];
 
       let statusIdx = 0;
@@ -42,7 +49,7 @@ const ClipGenerator: React.FC = () => {
           setStatus(statuses[statusIdx]);
           statusIdx++;
         }
-      }, 15000);
+      }, 20000); // Maior intervalo pois clipes longos demoram mais
 
       const generated = await api.generateClips(user.id, videoInput, {
         durationRange: duration,
@@ -104,66 +111,99 @@ const ClipGenerator: React.FC = () => {
       <main className="flex-grow p-6 md:p-10 transition-all duration-300 md:ml-72">
         <div className="max-w-6xl mx-auto">
           <header className="mb-10">
-            <h1 className="text-3xl md:text-5xl font-black">Criador Viral Premium</h1>
-            <p className="text-slate-500 mt-2 font-medium">Vídeos 9:16 com legendas emocionais e persuasivas.</p>
+            <h1 className="text-3xl md:text-5xl font-black">Gerador de Cortes Premium</h1>
+            <p className="text-slate-500 mt-2 font-medium">Escolha a duração e deixe a IA criar seus clipes virais.</p>
           </header>
 
           {!isProcessing && clips.length === 0 && (
-            <div className="bg-slate-900 border border-slate-800 rounded-[40px] p-8 md:p-12 max-w-3xl mx-auto shadow-2xl">
+            <div className="bg-slate-900 border border-slate-800 rounded-[40px] p-8 md:p-12 max-w-4xl mx-auto shadow-2xl">
               <div className="space-y-8">
                 <div>
-                  <label className="block text-xl font-black mb-4">Link do YouTube</label>
+                  <label className="block text-xl font-black mb-4 flex items-center gap-2">
+                    <i className="fa-brands fa-youtube text-red-500"></i>
+                    Link do Vídeo
+                  </label>
                   <input 
                     type="text"
-                    placeholder="Cole o link aqui..."
-                    className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-6 py-6 focus:ring-2 focus:ring-green-500/50 outline-none transition text-lg"
+                    placeholder="https://www.youtube.com/watch?v=..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-6 py-6 focus:ring-2 focus:ring-green-500/50 outline-none transition text-lg font-medium"
                     value={videoInput}
                     onChange={e => setVideoInput(e.target.value)}
                   />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
-                  <div>
-                    <label className="block text-sm font-bold text-slate-400 mb-4 uppercase">Estilo da Legenda</label>
-                    <div className="flex gap-3">
-                      {['yellow', 'cyan', 'lime', 'white'].map(c => (
-                        <button key={c} onClick={() => setSubtitleColor(c)} className={`w-10 h-10 rounded-full border-2 ${subtitleColor === c ? 'border-white scale-110' : 'border-transparent opacity-50'}`} style={{ backgroundColor: c }} />
-                      ))}
-                    </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-400 mb-4 uppercase tracking-widest">Duração por Clipe</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                    {durationOptions.map(opt => (
+                      <button 
+                        key={opt.value} 
+                        onClick={() => setDuration(opt.value)} 
+                        className={`py-4 rounded-xl border text-[11px] font-black transition-all ${duration === opt.value ? 'bg-green-500 text-slate-950 border-green-500 shadow-lg shadow-green-500/20 scale-105' : 'bg-slate-950 text-slate-500 border-slate-800 hover:border-slate-600'}`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
-                <button onClick={handleGenerate} className="w-full bg-green-500 text-slate-950 font-black text-xl py-6 rounded-2xl hover:bg-green-400 transition-all shadow-xl shadow-green-500/20">
-                  GERAR 10 CLIPES PREMIUM
-                </button>
+                <div>
+                  <label className="block text-sm font-bold text-slate-400 mb-4 uppercase tracking-widest">Cor das Legendas Emocionais</label>
+                  <div className="flex gap-4">
+                    {['yellow', 'cyan', 'lime', 'white', '#ff0055'].map(c => (
+                      <button 
+                        key={c} 
+                        onClick={() => setSubtitleColor(c)} 
+                        className={`w-12 h-12 rounded-2xl border-2 transition-all ${subtitleColor === c ? 'border-white scale-110 shadow-lg shadow-white/10' : 'border-transparent opacity-40 hover:opacity-100'}`} 
+                        style={{ backgroundColor: c }} 
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-4">
+                  <button onClick={handleGenerate} className="w-full bg-green-500 text-slate-950 font-black text-2xl py-7 rounded-3xl hover:bg-green-400 transition-all shadow-2xl shadow-green-500/30 flex items-center justify-center gap-4 group">
+                    <i className="fa-solid fa-wand-magic-sparkles group-hover:rotate-12 transition-transform"></i>
+                    GERAR 10 CLIPES PREMIUM
+                  </button>
+                  <p className="text-center text-slate-500 text-xs mt-6 font-medium">
+                    <i className="fa-solid fa-circle-info mr-1 text-green-500/50"></i>
+                    Custo da geração: 10 créditos. Clipes de até 3 minutos exigem processamento intensivo.
+                  </p>
+                </div>
               </div>
             </div>
           )}
 
           {isProcessing && (
             <div className="flex flex-col items-center justify-center min-h-[50vh] text-center">
-              <div className="w-20 h-20 border-[6px] border-slate-800 border-t-green-500 rounded-full animate-spin mb-8"></div>
-              <h2 className="text-3xl font-black text-green-500 mb-4">{status}</h2>
-              <p className="text-slate-500 max-w-md mx-auto">O motor está processando legendas dinâmicas e cores virais. Não feche esta aba.</p>
+              <div className="relative mb-12">
+                <div className="w-24 h-24 border-[8px] border-slate-800 border-t-green-500 rounded-full animate-spin"></div>
+                <i className="fa-solid fa-bolt text-green-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-2xl animate-pulse"></i>
+              </div>
+              <h2 className="text-3xl md:text-4xl font-black text-green-500 mb-4 animate-pulse">{status}</h2>
+              <p className="text-slate-500 max-w-md mx-auto font-medium">Estamos aplicando filtros de cor viral e legendas persuasivas. Isso pode levar de 3 a 8 minutos para clipes longos.</p>
             </div>
           )}
 
           {clips.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 animate-in fade-in duration-700">
               {clips.map((clip, idx) => (
-                <div key={clip.id} className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden group hover:border-green-500/40 transition-all">
+                <div key={clip.id} className="bg-slate-900 border border-slate-800 rounded-[32px] overflow-hidden group hover:border-green-500/40 transition-all hover:shadow-2xl hover:shadow-green-500/5">
                   <div className="aspect-[9/16] relative bg-black">
-                    <img src={clip.thumbnail} className="w-full h-full object-cover opacity-60" />
-                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition bg-black/40">
-                       <button onClick={() => setSelectedVideo(clip.videoUrl)} className="w-14 h-14 bg-white text-slate-950 rounded-full flex items-center justify-center shadow-2xl hover:scale-110 transition">
+                    <img src={clip.thumbnail} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition duration-500" />
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition bg-black/40 backdrop-blur-[2px]">
+                       <button onClick={() => setSelectedVideo(clip.videoUrl)} className="w-16 h-16 bg-white text-slate-950 rounded-full flex items-center justify-center shadow-2xl hover:scale-110 transition">
                          <i className="fa-solid fa-play ml-1"></i>
                        </button>
                     </div>
+                    <div className="absolute top-5 left-5 bg-green-500 text-slate-950 px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter">Viral #{idx + 1}</div>
+                    <div className="absolute bottom-5 right-5 bg-black/80 px-2 py-1 rounded text-[9px] font-bold">{clip.duration}s</div>
                   </div>
-                  <div className="p-4">
-                    <h3 className="text-xs font-bold text-white mb-3 line-clamp-2">{clip.title}</h3>
-                    <button onClick={() => downloadClip(clip)} className="w-full bg-slate-950 hover:bg-green-500 hover:text-slate-950 text-white font-black py-3 rounded-xl transition text-[10px] border border-slate-800 uppercase">
-                      Baixar MP4
+                  <div className="p-5">
+                    <h3 className="text-xs font-bold text-white mb-4 line-clamp-2 leading-relaxed">{clip.title}</h3>
+                    <button onClick={() => downloadClip(clip)} className="w-full bg-slate-950 hover:bg-green-500 hover:text-slate-950 text-white font-black py-4 rounded-2xl transition text-[10px] border border-slate-800 uppercase flex items-center justify-center gap-2">
+                      <i className="fa-solid fa-cloud-arrow-down text-sm"></i> BAIXAR MP4
                     </button>
                   </div>
                 </div>
