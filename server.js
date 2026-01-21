@@ -34,7 +34,7 @@ app.use('/temp', express.static(TEMP_DIR, {
 }));
 
 app.get('/health', (req, res) => {
-    res.json({ status: "online", version: "2.8-ANTI-BLOCK" });
+    res.json({ status: "online", version: "2.9-UNIVERSAL" });
 });
 
 const VIRAL_HOOKS = [
@@ -58,9 +58,12 @@ const generateHandler = async (req, res) => {
     const sessionID = Date.now();
     const inputPath = path.join(TEMP_DIR, `source_${sessionID}.mp4`);
     
-    console.log(`[JOB] Iniciando geração V2.8 (ANTI-BLOCK) para ${userId}`);
+    console.log(`[JOB] Iniciando Motor V2.9 (UNIVERSAL) para ${userId}`);
 
     try {
+        // Limpeza de cache do yt-dlp para evitar erros de sessões antigas
+        try { execSync('yt-dlp --rm-cache-dir'); } catch(e) {}
+
         let minDur = 61, maxDur = 90;
         let isRandom = false;
         
@@ -76,37 +79,40 @@ const generateHandler = async (req, res) => {
             }
         }
 
-        console.log("[STEP 1] Tentando Download com Headers Reais...");
+        console.log("[STEP 1] Extraindo Stream Universal...");
         
-        // Headers que fazem o servidor parecer um navegador Chrome comum no Windows
-        const headers = [
+        // Headers de simulação profunda
+        const spoofArgs = [
             '--user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"',
-            '--add-header "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"',
-            '--add-header "Accept-Language: pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7"',
-            '--add-header "Sec-Fetch-Mode: navigate"',
-            '--referer "https://www.google.com/"'
+            '--no-check-certificates',
+            '--geo-bypass',
+            '--format-sort "res:480,ext:mp4:m4a"',
+            '--referer "https://www.youtube.com/"'
         ].join(' ');
 
-        // Comando de download com fallback: Tenta MP4 480p, se não der, tenta qualquer vídeo 480p e converte.
-        const downloadCmd = `yt-dlp -f "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480]/best" --no-playlist --no-check-certificates --geo-bypass --no-cache-dir ${headers} "${videoUrl}" -o "${inputPath}"`;
+        // Comando simplificado que prioriza MP4 mas aceita qualquer formato 'best' se falhar
+        const downloadCmd = `yt-dlp -f "bestvideo[height<=480]+bestaudio/best[height<=480]/best" ${spoofArgs} --merge-output-format mp4 "${videoUrl}" -o "${inputPath}"`;
 
         exec(downloadCmd, (error, stdout, stderr) => {
             if (error) {
-                console.error("[DOWNLOAD ERROR]:", stderr);
+                console.error("[DOWNLOAD FAIL]:", stderr);
                 return res.status(500).json({ 
-                  error: "O YouTube bloqueou este link específico para servidores. Dica: Tente um vídeo de outro canal ou aguarde 5 minutos e tente novamente." 
+                  error: "O YouTube bloqueou o download. A Railway precisa de um novo IP (Reinicie o serviço) ou tente outro vídeo." 
                 });
             }
 
-            if (!fs.existsSync(inputPath) || fs.statSync(inputPath).size === 0) {
-                return res.status(500).json({ error: "O vídeo foi baixado mas o arquivo está vazio. Tente outro link." });
+            if (!fs.existsSync(inputPath) || fs.statSync(inputPath).size < 1000) {
+                return res.status(500).json({ error: "Arquivo baixado é inválido. Tente um link direto do navegador." });
             }
 
             try {
+                // Tenta pegar a duração. Se falhar aqui, o arquivo não tem vídeo legível.
                 const durationInfo = execSync(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${inputPath}"`).toString().trim();
                 const totalVideoDuration = parseFloat(durationInfo);
                 
-                if (isNaN(totalVideoDuration)) throw new Error("Duração inválida");
+                if (isNaN(totalVideoDuration) || totalVideoDuration <= 0) {
+                    throw new Error("Duração ilegível pelo FFmpeg");
+                }
 
                 const clips = [];
                 const numberOfClips = 10; 
@@ -125,19 +131,25 @@ const generateHandler = async (req, res) => {
                     }
 
                     const timestamp = new Date(startSec * 1000).toISOString().substr(11, 8);
-                    const clipName = `clip_v28_${sessionID}_${i}.mp4`;
+                    const clipName = `clip_v29_${sessionID}_${i}.mp4`;
                     const outputPath = path.join(TEMP_DIR, clipName);
                     
                     const hook = VIRAL_HOOKS[i % VIRAL_HOOKS.length];
                     const color = settings?.subtitleStyle?.color || 'yellow';
                     
-                    // FILTRO V2.8: Ajuste de escala para não distorcer e garantir que as legendas apareçam
-                    const complexFilter = `[0:v]scale=w='if(gt(a,9/16),-1,540)':h='if(gt(a,9/16),960,-1)',crop=540:960,drawtext=text='${hook}':fontcolor=${color}:fontsize=20:x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.6:boxborderw=5[v]`;
+                    // FILTRO V2.9: Adicionado 'setsar=1' para evitar distorção em vídeos com aspect ratio estranho
+                    const complexFilter = `[0:v]scale=w='if(gt(a,9/16),-1,540)':h='if(gt(a,9/16),960,-1)',crop=540:960,setsar=1,drawtext=text='${hook}':fontcolor=${color}:fontsize=18:x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.6:boxborderw=4[v]`;
                     
-                    const cutCmd = `ffmpeg -ss ${timestamp} -i "${inputPath}" -t ${finalDuration} -filter_complex "${complexFilter}" -map "[v]" -map 0:a? -c:v libx264 -preset ultrafast -crf 26 -pix_fmt yuv420p -movflags +faststart -c:a aac -b:a 128k -y "${outputPath}"`;
+                    // Mapeia áudio de forma opcional (ignore se não houver áudio)
+                    const cutCmd = `ffmpeg -ss ${timestamp} -i "${inputPath}" -t ${finalDuration} -filter_complex "${complexFilter}" -map "[v]" -map 0:a? -c:v libx264 -preset ultrafast -crf 28 -pix_fmt yuv420p -movflags +faststart -c:a aac -b:a 96k -y "${outputPath}"`;
                     
-                    console.log(`[RENDER] Criando Clipe ${i+1}/10...`);
-                    execSync(cutCmd);
+                    console.log(`[RENDER] Clipe ${i+1}/10...`);
+                    try {
+                        execSync(cutCmd, { stdio: 'ignore' });
+                    } catch (e) {
+                        console.error(`Erro no clipe ${i}:`, e.message);
+                        continue; // Tenta o próximo se um falhar
+                    }
                     
                     clips.push({
                         id: `clip-${sessionID}-${i}`,
@@ -150,20 +162,21 @@ const generateHandler = async (req, res) => {
                     });
                 }
 
+                if (clips.length === 0) throw new Error("Nenhum clipe pôde ser gerado");
+
                 res.json({ status: "success", clips });
 
-                setTimeout(() => { 
-                    if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath); 
-                }, 600000);
+                // Limpeza agendada
+                setTimeout(() => { if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath); }, 300000);
 
             } catch (err) {
-                console.error("[PROCESSING ERROR]:", err);
-                res.status(500).json({ error: "Erro ao cortar o vídeo. Certifique-se que o vídeo tem áudio e imagem." });
+                console.error("[INTERNAL ERROR]:", err);
+                res.status(500).json({ error: "O vídeo foi baixado mas está protegido ou corrompido. Tente outro canal." });
             }
         });
     } catch (e) {
-        console.error("[CRITICAL]:", e);
-        res.status(500).json({ error: "Erro crítico no servidor." });
+        console.error("[FATAL]:", e);
+        res.status(500).json({ error: "Erro crítico no motor de vídeo." });
     }
 };
 
@@ -172,5 +185,5 @@ app.post('/generate-real-clips', generateHandler);
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[SERVER] Motor V2.8 ANTI-BLOCK Online`);
+    console.log(`[SERVER] Motor V2.9 UNIVERSAL Ativo`);
 });
