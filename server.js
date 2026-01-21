@@ -5,7 +5,7 @@ const { exec, execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-// MOTOR BIZERRA V3.3 - FONTE 12 OTIMIZADA (AUTO-REDEPLOY)
+// MOTOR BIZERRA V3.4 - FONTE 13 (AJUSTE FINO - AUTO-REDEPLOY)
 const app = express();
 
 app.use((req, res, next) => {
@@ -35,7 +35,7 @@ app.use('/temp', express.static(TEMP_DIR, {
 }));
 
 app.get('/health', (req, res) => {
-    res.json({ status: "online", version: "3.3-CLEAN-FONT" });
+    res.json({ status: "online", version: "3.4-STABLE-V13" });
 });
 
 const VIRAL_HOOKS = [
@@ -59,7 +59,7 @@ const generateHandler = async (req, res) => {
     const sessionID = Date.now();
     const inputPath = path.join(TEMP_DIR, `source_${sessionID}.mp4`);
     
-    console.log(`[JOB] Iniciando Motor V3.3 (Font 12) para ${userId}`);
+    console.log(`[JOB] Iniciando Motor V3.4 (Font 13) para ${userId}`);
 
     try {
         try { execSync('yt-dlp --rm-cache-dir'); } catch(e) {}
@@ -118,14 +118,14 @@ const generateHandler = async (req, res) => {
                     }
 
                     const timestamp = new Date(startSec * 1000).toISOString().substr(11, 8);
-                    const clipName = `clip_v33_${sessionID}_${i}.mp4`;
+                    const clipName = `clip_v34_${sessionID}_${i}.mp4`;
                     const outputPath = path.join(TEMP_DIR, clipName);
                     
                     const hook = VIRAL_HOOKS[i % VIRAL_HOOKS.length];
                     const color = settings?.subtitleStyle?.color || 'yellow';
                     
-                    // FILTRO V3.3: Fonte 12 para garantir que o texto não corte e fique elegante
-                    const complexFilter = `[0:v]scale=w='if(gt(a,9/16),-1,540)':h='if(gt(a,9/16),960,-1)',crop=540:960,setsar=1,drawtext=text='${hook}':fontcolor=${color}:fontsize=12:x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.7:boxborderw=6:borderw=1:bordercolor=black[v]`;
+                    // FILTRO V3.4: Fonte 13 aplicada. boxborderw reduzido para 5 para acompanhar o texto menor.
+                    const complexFilter = `[0:v]scale=w='if(gt(a,9/16),-1,540)':h='if(gt(a,9/16),960,-1)',crop=540:960,setsar=1,drawtext=text='${hook}':fontcolor=${color}:fontsize=13:x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.7:boxborderw=5:borderw=1:bordercolor=black[v]`;
                     
                     const cutCmd = `ffmpeg -ss ${timestamp} -i "${inputPath}" -t ${finalDuration} -filter_complex "${complexFilter}" -map "[v]" -map 0:a? -c:v libx264 -preset ultrafast -crf 28 -pix_fmt yuv420p -movflags +faststart -c:a aac -b:a 128k -y "${outputPath}"`;
                     
@@ -163,5 +163,5 @@ app.post('/generate-real-clips', generateHandler);
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[SERVER] Motor V3.3 ON - Legendas Tamanho 12 (Elegante)`);
+    console.log(`[SERVER] Motor V3.4 ON - Legendas Tamanho 13`);
 });
