@@ -34,17 +34,17 @@ const ClipGenerator: React.FC = () => {
     if (user.credits < 10) return navigate('/planos');
 
     setIsProcessing(true);
-    setStatus('Iniciando Motor V3.1...');
+    setStatus('Iniciando Motor V3.3...');
     
     try {
       const statuses = [
-        'Limpando cache do servidor...',
-        'Conectando ao YouTube (IP Novo)...',
-        'Processando vídeo em 9:16...',
-        'Aplicando Legendas HD (Tamanho 20)...',
-        'Extraindo momentos de alta retenção...',
-        'Otimizando clareza de áudio...',
-        'Finalizando pack de 10 clipes...'
+        'Limpando arquivos temporários...',
+        'Conectando ao YouTube (Proxy Seguro)...',
+        'Convertendo para Formato Vertical...',
+        'Aplicando Legendas Otimizadas (Tamanho 12)...',
+        'Processando cortes virais...',
+        'Finalizando codificação UltraFast...',
+        'Pronto! Gerando seus 10 clipes...'
       ];
 
       let statusIdx = 0;
@@ -57,7 +57,7 @@ const ClipGenerator: React.FC = () => {
 
       const generated = await api.generateClips(user.id, videoInput, {
         durationRange: duration,
-        subtitleStyle: { color: subtitleColor, size: 'medium', hasShadow: true }
+        subtitleStyle: { color: subtitleColor, size: 'small', hasShadow: true }
       });
       
       clearInterval(interval);
@@ -65,7 +65,7 @@ const ClipGenerator: React.FC = () => {
       refreshUser();
     } catch (err: any) {
       console.error(err);
-      alert(err.message || "O YouTube bloqueou a conexão. O servidor vai reiniciar para tentar um novo IP automaticamente.");
+      alert(err.message || "Erro no processamento. O servidor está tentando um novo IP automaticamente.");
       navigate('/galeria');
     } finally {
       setIsProcessing(false);
@@ -116,8 +116,8 @@ const ClipGenerator: React.FC = () => {
       <main className="flex-grow p-6 md:p-10 transition-all duration-300 md:ml-72">
         <div className="max-w-6xl mx-auto">
           <header className="mb-10">
-            <h1 className="text-3xl md:text-5xl font-black tracking-tight">Cortes Inteligentes V3.1</h1>
-            <p className="text-slate-500 mt-2 font-medium">Legendas otimizadas tamanho 20 com contorno de alta definição.</p>
+            <h1 className="text-3xl md:text-5xl font-black tracking-tight">Cortes Inteligentes V3.3</h1>
+            <p className="text-slate-500 mt-2 font-medium">Legendas otimizadas (Tamanho 12) para máxima leitura e elegância.</p>
           </header>
 
           {!isProcessing && clips.length === 0 && (
@@ -135,7 +135,7 @@ const ClipGenerator: React.FC = () => {
                     value={videoInput}
                     onChange={e => setVideoInput(e.target.value)}
                   />
-                  <p className="text-slate-500 text-xs mt-3 px-2">Dica: Use links de vídeos com mais de 10 minutos para melhores resultados.</p>
+                  <p className="text-slate-500 text-xs mt-3 px-2">As legendas foram ajustadas para o tamanho 12, garantindo que frases longas apareçam inteiras.</p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -155,7 +155,7 @@ const ClipGenerator: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-bold text-slate-400 mb-4 uppercase tracking-widest">Legendas HD</label>
+                    <label className="block text-sm font-bold text-slate-400 mb-4 uppercase tracking-widest">Estilo (Fonte 12)</label>
                     <div className="flex gap-3">
                       {['yellow', 'cyan', 'white', '#ff0055'].map(c => (
                         <button 
@@ -172,7 +172,7 @@ const ClipGenerator: React.FC = () => {
                 <div className="pt-4">
                   <button onClick={handleGenerate} className="w-full bg-green-500 text-slate-950 font-black text-2xl py-7 rounded-3xl hover:bg-green-400 transition-all shadow-2xl shadow-green-500/30 flex items-center justify-center gap-4 group">
                     <i className="fa-solid fa-wand-magic-sparkles group-hover:rotate-12 transition-transform"></i>
-                    CRIAR CLIPES AGORA
+                    GERAR EM ALTA DEFINIÇÃO
                   </button>
                 </div>
               </div>
@@ -186,7 +186,7 @@ const ClipGenerator: React.FC = () => {
                 <i className="fa-solid fa-bolt text-green-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-2xl animate-pulse"></i>
               </div>
               <h2 className="text-3xl md:text-4xl font-black text-white mb-4">{status}</h2>
-              <p className="text-slate-500 max-w-md mx-auto font-medium">Não feche esta página. O motor V3.1 está processando seus cortes com máxima qualidade.</p>
+              <p className="text-slate-500 max-w-md mx-auto font-medium">Ajustando cada detalhe das legendas para o tamanho 12. Qualidade profissional garantida.</p>
             </div>
           )}
 
@@ -203,7 +203,7 @@ const ClipGenerator: React.FC = () => {
                     </div>
                   </div>
                   <div className="p-5">
-                    <h3 className="text-xs font-bold text-white mb-4 line-clamp-2 leading-relaxed">{clip.title}</h3>
+                    <h3 className="text-[11px] font-bold text-white mb-4 line-clamp-2 leading-tight uppercase">{clip.title}</h3>
                     <button onClick={() => downloadClip(clip)} className="w-full bg-slate-950 hover:bg-green-500 hover:text-slate-950 text-white font-black py-4 rounded-2xl transition text-[10px] border border-slate-800 uppercase flex items-center justify-center gap-2">
                       <i className="fa-solid fa-cloud-arrow-down text-sm"></i> BAIXAR MP4
                     </button>
