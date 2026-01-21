@@ -34,17 +34,17 @@ const ClipGenerator: React.FC = () => {
     if (user.credits < 10) return navigate('/planos');
 
     setIsProcessing(true);
-    setStatus('Protocolo ANTI-BLOCK Ativado...');
+    setStatus('Iniciando Motor V3.1...');
     
     try {
       const statuses = [
-        'Baixando vídeo (Protocolo Seguro)...',
-        'Bypassing YouTube Bot Detection...',
-        'Formatando Aspect Ratio 9:16...',
-        'Injetando Legendas Tamanho 20...',
-        'Extraindo 10 Clipes de Alta Retenção...',
-        'Otimizando cores e brilho...',
-        'Finalizando arquivos MP4...'
+        'Limpando cache do servidor...',
+        'Conectando ao YouTube (IP Novo)...',
+        'Processando vídeo em 9:16...',
+        'Aplicando Legendas HD (Tamanho 20)...',
+        'Extraindo momentos de alta retenção...',
+        'Otimizando clareza de áudio...',
+        'Finalizando pack de 10 clipes...'
       ];
 
       let statusIdx = 0;
@@ -53,7 +53,7 @@ const ClipGenerator: React.FC = () => {
           setStatus(statuses[statusIdx]);
           statusIdx++;
         }
-      }, 10000); 
+      }, 8000); 
 
       const generated = await api.generateClips(user.id, videoInput, {
         durationRange: duration,
@@ -65,7 +65,7 @@ const ClipGenerator: React.FC = () => {
       refreshUser();
     } catch (err: any) {
       console.error(err);
-      alert(err.message || "Erro de conexão. Tente novamente em instantes.");
+      alert(err.message || "O YouTube bloqueou a conexão. O servidor vai reiniciar para tentar um novo IP automaticamente.");
       navigate('/galeria');
     } finally {
       setIsProcessing(false);
@@ -116,22 +116,17 @@ const ClipGenerator: React.FC = () => {
       <main className="flex-grow p-6 md:p-10 transition-all duration-300 md:ml-72">
         <div className="max-w-6xl mx-auto">
           <header className="mb-10">
-            <h1 className="text-3xl md:text-5xl font-black">Gerador de Cortes Premium</h1>
-            <p className="text-slate-500 mt-2 font-medium">Motor V3.0 ativado com legendas em tamanho 20.</p>
+            <h1 className="text-3xl md:text-5xl font-black tracking-tight">Cortes Inteligentes V3.1</h1>
+            <p className="text-slate-500 mt-2 font-medium">Legendas otimizadas tamanho 20 com contorno de alta definição.</p>
           </header>
 
           {!isProcessing && clips.length === 0 && (
             <div className="bg-slate-900 border border-slate-800 rounded-[40px] p-8 md:p-12 max-w-4xl mx-auto shadow-2xl">
               <div className="space-y-8">
-                <div className="bg-green-500/5 border border-green-500/10 p-4 rounded-2xl flex items-center gap-3">
-                   <i className="fa-solid fa-check-circle text-green-500"></i>
-                   <p className="text-green-500/80 text-xs font-bold">Filtro de legendas otimizado para visibilidade total.</p>
-                </div>
-
                 <div>
                   <label className="block text-xl font-black mb-4 flex items-center gap-2">
-                    <i className="fa-brands fa-youtube text-red-500"></i>
-                    Link do Vídeo (YouTube)
+                    <i className="fa-brands fa-youtube text-red-500 text-2xl"></i>
+                    Cole o link do YouTube
                   </label>
                   <input 
                     type="text"
@@ -140,41 +135,44 @@ const ClipGenerator: React.FC = () => {
                     value={videoInput}
                     onChange={e => setVideoInput(e.target.value)}
                   />
+                  <p className="text-slate-500 text-xs mt-3 px-2">Dica: Use links de vídeos com mais de 10 minutos para melhores resultados.</p>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-bold text-slate-400 mb-4 uppercase tracking-widest">Duração por Clipe</label>
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                    {durationOptions.map(opt => (
-                      <button 
-                        key={opt.value} 
-                        onClick={() => setDuration(opt.value)} 
-                        className={`py-4 rounded-xl border text-[11px] font-black transition-all ${duration === opt.value ? 'bg-green-500 text-slate-950 border-green-500 shadow-lg shadow-green-500/20 scale-105' : 'bg-slate-950 text-slate-500 border-slate-800 hover:border-slate-600'}`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div>
+                    <label className="block text-sm font-bold text-slate-400 mb-4 uppercase tracking-widest">Duração</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {durationOptions.slice(0, 4).map(opt => (
+                        <button 
+                          key={opt.value} 
+                          onClick={() => setDuration(opt.value)} 
+                          className={`py-3 rounded-xl border text-[11px] font-black transition-all ${duration === opt.value ? 'bg-green-500 text-slate-950 border-green-500' : 'bg-slate-950 text-slate-500 border-slate-800 hover:border-slate-600'}`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
 
-                <div>
-                  <label className="block text-sm font-bold text-slate-400 mb-4 uppercase tracking-widest">Cor das Legendas</label>
-                  <div className="flex gap-4">
-                    {['yellow', 'cyan', 'lime', 'white', '#ff0055'].map(c => (
-                      <button 
-                        key={c} 
-                        onClick={() => setSubtitleColor(c)} 
-                        className={`w-12 h-12 rounded-2xl border-2 transition-all ${subtitleColor === c ? 'border-white scale-110 shadow-lg shadow-white/10' : 'border-transparent opacity-40 hover:opacity-100'}`} 
-                        style={{ backgroundColor: c }} 
-                      />
-                    ))}
+                  <div>
+                    <label className="block text-sm font-bold text-slate-400 mb-4 uppercase tracking-widest">Legendas HD</label>
+                    <div className="flex gap-3">
+                      {['yellow', 'cyan', 'white', '#ff0055'].map(c => (
+                        <button 
+                          key={c} 
+                          onClick={() => setSubtitleColor(c)} 
+                          className={`w-10 h-10 rounded-xl border-2 transition-all ${subtitleColor === c ? 'border-white scale-110 shadow-lg' : 'border-transparent opacity-40 hover:opacity-100'}`} 
+                          style={{ backgroundColor: c }} 
+                        />
+                      ))}
+                    </div>
                   </div>
                 </div>
 
                 <div className="pt-4">
                   <button onClick={handleGenerate} className="w-full bg-green-500 text-slate-950 font-black text-2xl py-7 rounded-3xl hover:bg-green-400 transition-all shadow-2xl shadow-green-500/30 flex items-center justify-center gap-4 group">
                     <i className="fa-solid fa-wand-magic-sparkles group-hover:rotate-12 transition-transform"></i>
-                    GERAR 10 CLIPES (FONTE 20)
+                    CRIAR CLIPES AGORA
                   </button>
                 </div>
               </div>
@@ -182,18 +180,18 @@ const ClipGenerator: React.FC = () => {
           )}
 
           {isProcessing && (
-            <div className="flex flex-col items-center justify-center min-h-[50vh] text-center">
-              <div className="relative mb-12">
+            <div className="flex flex-col items-center justify-center min-h-[50vh] text-center animate-in fade-in duration-500">
+              <div className="relative mb-12 scale-125">
                 <div className="w-24 h-24 border-[8px] border-slate-800 border-t-green-500 rounded-full animate-spin"></div>
                 <i className="fa-solid fa-bolt text-green-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-2xl animate-pulse"></i>
               </div>
-              <h2 className="text-3xl md:text-4xl font-black text-green-500 mb-4 animate-pulse">{status}</h2>
-              <p className="text-slate-500 max-w-md mx-auto font-medium">Estamos redesenhando cada clipe com legendas de tamanho 20 para seu sucesso viral.</p>
+              <h2 className="text-3xl md:text-4xl font-black text-white mb-4">{status}</h2>
+              <p className="text-slate-500 max-w-md mx-auto font-medium">Não feche esta página. O motor V3.1 está processando seus cortes com máxima qualidade.</p>
             </div>
           )}
 
           {clips.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 animate-in fade-in duration-700">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 animate-in zoom-in duration-500">
               {clips.map((clip, idx) => (
                 <div key={clip.id} className="bg-slate-900 border border-slate-800 rounded-[32px] overflow-hidden group hover:border-green-500/40 transition-all">
                   <div className="aspect-[9/16] relative bg-black">
@@ -203,7 +201,6 @@ const ClipGenerator: React.FC = () => {
                          <i className="fa-solid fa-play ml-1"></i>
                        </button>
                     </div>
-                    <div className="absolute top-5 left-5 bg-green-500 text-slate-950 px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter">Clipe #{idx + 1}</div>
                   </div>
                   <div className="p-5">
                     <h3 className="text-xs font-bold text-white mb-4 line-clamp-2 leading-relaxed">{clip.title}</h3>
