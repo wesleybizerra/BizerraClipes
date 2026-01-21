@@ -34,7 +34,7 @@ app.use('/temp', express.static(TEMP_DIR, {
 }));
 
 app.get('/health', (req, res) => {
-    res.json({ status: "online", version: "2.7-ULTRA-ROBUST" });
+    res.json({ status: "online", version: "2.8-ANTI-BLOCK" });
 });
 
 const VIRAL_HOOKS = [
@@ -58,7 +58,7 @@ const generateHandler = async (req, res) => {
     const sessionID = Date.now();
     const inputPath = path.join(TEMP_DIR, `source_${sessionID}.mp4`);
     
-    console.log(`[JOB] Iniciando geração V2.7 para ${userId}`);
+    console.log(`[JOB] Iniciando geração V2.8 (ANTI-BLOCK) para ${userId}`);
 
     try {
         let minDur = 61, maxDur = 90;
@@ -76,24 +76,30 @@ const generateHandler = async (req, res) => {
             }
         }
 
-        console.log("[STEP 1] Download Agressivo Iniciado...");
+        console.log("[STEP 1] Tentando Download com Headers Reais...");
         
-        // Comando Ultra Robusto: 
-        // 1. Simula Chrome no Windows
-        // 2. Geo-bypass
-        // 3. Força formato MP4 compatível
-        // 4. Limita resolução para 480p para velocidade e estabilidade
-        const downloadCmd = `yt-dlp -f "best[height<=480][ext=mp4]/best[height<=480]" --no-playlist --no-check-certificates --merge-output-format mp4 --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" --referer "https://www.youtube.com/" --geo-bypass "${videoUrl}" -o "${inputPath}"`;
+        // Headers que fazem o servidor parecer um navegador Chrome comum no Windows
+        const headers = [
+            '--user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"',
+            '--add-header "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"',
+            '--add-header "Accept-Language: pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7"',
+            '--add-header "Sec-Fetch-Mode: navigate"',
+            '--referer "https://www.google.com/"'
+        ].join(' ');
+
+        // Comando de download com fallback: Tenta MP4 480p, se não der, tenta qualquer vídeo 480p e converte.
+        const downloadCmd = `yt-dlp -f "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480]/best" --no-playlist --no-check-certificates --geo-bypass --no-cache-dir ${headers} "${videoUrl}" -o "${inputPath}"`;
 
         exec(downloadCmd, (error, stdout, stderr) => {
             if (error) {
                 console.error("[DOWNLOAD ERROR]:", stderr);
-                return res.status(500).json({ error: "O YouTube bloqueou o acesso deste vídeo ao nosso servidor. Tente outro link ou vídeo." });
+                return res.status(500).json({ 
+                  error: "O YouTube bloqueou este link específico para servidores. Dica: Tente um vídeo de outro canal ou aguarde 5 minutos e tente novamente." 
+                });
             }
 
-            // Verifica se o arquivo realmente existe e tem tamanho
             if (!fs.existsSync(inputPath) || fs.statSync(inputPath).size === 0) {
-                return res.status(500).json({ error: "O download falhou em gerar um arquivo válido. Tente um link diferente." });
+                return res.status(500).json({ error: "O vídeo foi baixado mas o arquivo está vazio. Tente outro link." });
             }
 
             try {
@@ -119,18 +125,18 @@ const generateHandler = async (req, res) => {
                     }
 
                     const timestamp = new Date(startSec * 1000).toISOString().substr(11, 8);
-                    const clipName = `clip_v27_${sessionID}_${i}.mp4`;
+                    const clipName = `clip_v28_${sessionID}_${i}.mp4`;
                     const outputPath = path.join(TEMP_DIR, clipName);
                     
                     const hook = VIRAL_HOOKS[i % VIRAL_HOOKS.length];
                     const color = settings?.subtitleStyle?.color || 'yellow';
                     
-                    // FILTRO OTIMIZADO: Fonte 18 (pequena e segura) + Centralização Vertical corrigida
-                    const complexFilter = `[0:v]crop=ih*9/16:ih,scale=540:960,eq=brightness=0.04:saturation=1.3:contrast=1.1,drawtext=text='${hook}':fontcolor=${color}:fontsize=18:x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.5:boxborderw=4[v]`;
+                    // FILTRO V2.8: Ajuste de escala para não distorcer e garantir que as legendas apareçam
+                    const complexFilter = `[0:v]scale=w='if(gt(a,9/16),-1,540)':h='if(gt(a,9/16),960,-1)',crop=540:960,drawtext=text='${hook}':fontcolor=${color}:fontsize=20:x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.6:boxborderw=5[v]`;
                     
-                    const cutCmd = `ffmpeg -ss ${timestamp} -i "${inputPath}" -t ${finalDuration} -filter_complex "${complexFilter}" -map "[v]" -map 0:a? -c:v libx264 -preset ultrafast -crf 28 -pix_fmt yuv420p -movflags +faststart -c:a aac -b:a 128k -y "${outputPath}"`;
+                    const cutCmd = `ffmpeg -ss ${timestamp} -i "${inputPath}" -t ${finalDuration} -filter_complex "${complexFilter}" -map "[v]" -map 0:a? -c:v libx264 -preset ultrafast -crf 26 -pix_fmt yuv420p -movflags +faststart -c:a aac -b:a 128k -y "${outputPath}"`;
                     
-                    console.log(`[RENDER] Processando Clipe ${i+1}/10...`);
+                    console.log(`[RENDER] Criando Clipe ${i+1}/10...`);
                     execSync(cutCmd);
                     
                     clips.push({
@@ -146,19 +152,18 @@ const generateHandler = async (req, res) => {
 
                 res.json({ status: "success", clips });
 
-                // Limpeza segura do arquivo fonte após o envio da resposta
                 setTimeout(() => { 
                     if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath); 
                 }, 600000);
 
             } catch (err) {
                 console.error("[PROCESSING ERROR]:", err);
-                res.status(500).json({ error: "Erro ao processar os cortes. O vídeo pode ter uma estrutura de áudio/vídeo incompatível." });
+                res.status(500).json({ error: "Erro ao cortar o vídeo. Certifique-se que o vídeo tem áudio e imagem." });
             }
         });
     } catch (e) {
-        console.error("[CRITICAL ERROR]:", e);
-        res.status(500).json({ error: "Ocorreu um erro crítico no servidor de processamento." });
+        console.error("[CRITICAL]:", e);
+        res.status(500).json({ error: "Erro crítico no servidor." });
     }
 };
 
@@ -167,5 +172,5 @@ app.post('/generate-real-clips', generateHandler);
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[SERVER] Motor V2.7 Ativo - Pronto para 10 Clipes`);
+    console.log(`[SERVER] Motor V2.8 ANTI-BLOCK Online`);
 });
