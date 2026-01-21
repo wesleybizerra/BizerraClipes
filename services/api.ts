@@ -2,7 +2,7 @@ import { User, UserRole, SubscriptionPlan, Clip, GenerationSettings } from '../t
 import { INITIAL_CREDITS, ADMIN_EMAIL } from '../constants.ts';
 
 // IMPORTANTE: Substitua pela URL que o Render te fornecer após o deploy (Ex: https://bizerra-backend.onrender.com)
-const BACKEND_URL = "https://sua-url-no-render.onrender.com";
+const BACKEND_URL = "bizerraclipes-production.up.railway.app";
 
 export const api = {
   getAllUsers: async (): Promise<User[]> => {
