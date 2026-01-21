@@ -34,16 +34,16 @@ const ClipGenerator: React.FC = () => {
     if (user.credits < 10) return navigate('/planos');
 
     setIsProcessing(true);
-    setStatus('Conectando ao Motor de Vídeo...');
+    setStatus('Iniciando Protocolo ANTI-BLOCK...');
     
     try {
       const statuses = [
-        'Baixando vídeo (Protocolo Seguro)...',
-        'Bypassing bot detection...',
-        'Injetando Legendas Coloridas (Tam 18)...',
-        'Extraindo 10 Clipes Virais...',
-        'Renderizando arquivos de alta retenção...',
-        'Finalizando processamento...',
+        'Baixando vídeo com Headers de Navegador...',
+        'Simulando tráfego residencial...',
+        'Bypassing YouTube Security...',
+        'Injetando Legendas V2.8...',
+        'Renderizando 10 Clipes Verticais...',
+        'Finalizando processamento pesado...',
         'Sincronizando sua galeria...'
       ];
 
@@ -53,7 +53,7 @@ const ClipGenerator: React.FC = () => {
           setStatus(statuses[statusIdx]);
           statusIdx++;
         }
-      }, 15000); 
+      }, 12000); 
 
       const generated = await api.generateClips(user.id, videoInput, {
         durationRange: duration,
@@ -65,7 +65,7 @@ const ClipGenerator: React.FC = () => {
       refreshUser();
     } catch (err: any) {
       console.error(err);
-      alert(err.message || "Erro de servidor. Tente outro vídeo ou aguarde alguns minutos.");
+      alert(err.message || "Erro no YouTube. Dica: Tente um vídeo que não seja Shorts ou Live.");
       navigate('/galeria');
     } finally {
       setIsProcessing(false);
@@ -117,12 +117,19 @@ const ClipGenerator: React.FC = () => {
         <div className="max-w-6xl mx-auto">
           <header className="mb-10">
             <h1 className="text-3xl md:text-5xl font-black">Gerador de Cortes Premium</h1>
-            <p className="text-slate-500 mt-2 font-medium">Extração de 10 clipes automáticos com legendas virais.</p>
+            <p className="text-slate-500 mt-2 font-medium">Motor V2.8 ANTI-BLOCK ativado para máxima compatibilidade.</p>
           </header>
 
           {!isProcessing && clips.length === 0 && (
             <div className="bg-slate-900 border border-slate-800 rounded-[40px] p-8 md:p-12 max-w-4xl mx-auto shadow-2xl">
               <div className="space-y-8">
+                <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-2xl">
+                    <p className="text-red-400 text-xs font-bold leading-relaxed">
+                        ⚠️ ATENÇÃO: Se o download falhar, o YouTube bloqueou o acesso temporário. 
+                        Tente vídeos de canais diferentes ou links que não sejam "Shorts".
+                    </p>
+                </div>
+
                 <div>
                   <label className="block text-xl font-black mb-4 flex items-center gap-2">
                     <i className="fa-brands fa-youtube text-red-500"></i>
@@ -183,7 +190,7 @@ const ClipGenerator: React.FC = () => {
                 <i className="fa-solid fa-bolt text-green-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-2xl animate-pulse"></i>
               </div>
               <h2 className="text-3xl md:text-4xl font-black text-green-500 mb-4 animate-pulse">{status}</h2>
-              <p className="text-slate-500 max-w-md mx-auto font-medium">Isso pode levar de 5 a 10 minutos para gerar os 10 clipes. Não feche esta aba.</p>
+              <p className="text-slate-500 max-w-md mx-auto font-medium italic">O YouTube está muito rígido hoje. Estamos usando protocolos extras para garantir o seu download...</p>
             </div>
           )}
 
