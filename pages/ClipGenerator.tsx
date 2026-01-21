@@ -34,17 +34,18 @@ const ClipGenerator: React.FC = () => {
     if (user.credits < 10) return navigate('/planos');
 
     setIsProcessing(true);
-    setStatus('Iniciando Motor V3.3...');
+    setStatus('Iniciando Motor V3.4...');
     
     try {
       const statuses = [
         'Limpando arquivos temporários...',
         'Conectando ao YouTube (Proxy Seguro)...',
         'Convertendo para Formato Vertical...',
-        'Aplicando Legendas Otimizadas (Tamanho 12)...',
+        'Reduzindo Legendas para Tamanho 13...',
+        'Ajustando visibilidade do texto...',
         'Processando cortes virais...',
         'Finalizando codificação UltraFast...',
-        'Pronto! Gerando seus 10 clipes...'
+        'Pack de 10 clipes em fase final...'
       ];
 
       let statusIdx = 0;
@@ -116,8 +117,8 @@ const ClipGenerator: React.FC = () => {
       <main className="flex-grow p-6 md:p-10 transition-all duration-300 md:ml-72">
         <div className="max-w-6xl mx-auto">
           <header className="mb-10">
-            <h1 className="text-3xl md:text-5xl font-black tracking-tight">Cortes Inteligentes V3.3</h1>
-            <p className="text-slate-500 mt-2 font-medium">Legendas otimizadas (Tamanho 12) para máxima leitura e elegância.</p>
+            <h1 className="text-3xl md:text-5xl font-black tracking-tight">Cortes Inteligentes V3.4</h1>
+            <p className="text-slate-500 mt-2 font-medium">Design Ultra-Clean: Legendas e Textos fixados no tamanho 13.</p>
           </header>
 
           {!isProcessing && clips.length === 0 && (
@@ -135,7 +136,7 @@ const ClipGenerator: React.FC = () => {
                     value={videoInput}
                     onChange={e => setVideoInput(e.target.value)}
                   />
-                  <p className="text-slate-500 text-xs mt-3 px-2">As legendas foram ajustadas para o tamanho 12, garantindo que frases longas apareçam inteiras.</p>
+                  <p className="text-slate-500 text-xs mt-3 px-2">Configurado: Texto reduzido para 13 para máxima área visível do vídeo.</p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -155,7 +156,7 @@ const ClipGenerator: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-bold text-slate-400 mb-4 uppercase tracking-widest">Estilo (Fonte 12)</label>
+                    <label className="block text-sm font-bold text-slate-400 mb-4 uppercase tracking-widest">Cor das Letras (Fonte 13)</label>
                     <div className="flex gap-3">
                       {['yellow', 'cyan', 'white', '#ff0055'].map(c => (
                         <button 
@@ -172,7 +173,7 @@ const ClipGenerator: React.FC = () => {
                 <div className="pt-4">
                   <button onClick={handleGenerate} className="w-full bg-green-500 text-slate-950 font-black text-2xl py-7 rounded-3xl hover:bg-green-400 transition-all shadow-2xl shadow-green-500/30 flex items-center justify-center gap-4 group">
                     <i className="fa-solid fa-wand-magic-sparkles group-hover:rotate-12 transition-transform"></i>
-                    GERAR EM ALTA DEFINIÇÃO
+                    CRIAR COM FONTE 13
                   </button>
                 </div>
               </div>
@@ -186,7 +187,7 @@ const ClipGenerator: React.FC = () => {
                 <i className="fa-solid fa-bolt text-green-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-2xl animate-pulse"></i>
               </div>
               <h2 className="text-3xl md:text-4xl font-black text-white mb-4">{status}</h2>
-              <p className="text-slate-500 max-w-md mx-auto font-medium">Ajustando cada detalhe das legendas para o tamanho 12. Qualidade profissional garantida.</p>
+              <p className="text-slate-500 max-w-md mx-auto font-medium">Implementando design de alto nível com fonte tamanho 13. Seus clipes ficarão idênticos aos dos maiores canais de cortes.</p>
             </div>
           )}
 
@@ -203,7 +204,7 @@ const ClipGenerator: React.FC = () => {
                     </div>
                   </div>
                   <div className="p-5">
-                    <h3 className="text-[11px] font-bold text-white mb-4 line-clamp-2 leading-tight uppercase">{clip.title}</h3>
+                    <h3 className="text-[11px] font-bold text-white mb-4 line-clamp-2 leading-tight uppercase tracking-tight">{clip.title}</h3>
                     <button onClick={() => downloadClip(clip)} className="w-full bg-slate-950 hover:bg-green-500 hover:text-slate-950 text-white font-black py-4 rounded-2xl transition text-[10px] border border-slate-800 uppercase flex items-center justify-center gap-2">
                       <i className="fa-solid fa-cloud-arrow-down text-sm"></i> BAIXAR MP4
                     </button>
