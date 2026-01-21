@@ -1,3 +1,4 @@
+
 import { User, UserRole, SubscriptionPlan, Clip, GenerationSettings } from '../types.ts';
 import { INITIAL_CREDITS, ADMIN_EMAIL } from '../constants.ts';
 
@@ -56,7 +57,6 @@ export const api = {
   generateClips: async (userId: string, videoUrl: string, settings: GenerationSettings): Promise<Clip[]> => {
     const endpoint = `${BACKEND_URL}/api/generate-real-clips`;
     
-    // Usando AbortController para permitir que a requisição dure até 10 minutos
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 600000); 
 
@@ -72,7 +72,12 @@ export const api = {
 
         if (!response.ok) {
           const text = await response.text();
-          throw new Error(text || "O servidor demorou muito. Verifique a Galeria em instantes.");
+          try {
+            const errorObj = JSON.parse(text);
+            throw new Error(errorObj.error || "Erro no servidor");
+          } catch (jsonErr) {
+            throw new Error(text || "O servidor demorou muito. Verifique a Galeria em instantes.");
+          }
         }
         
         const data = await response.json();
@@ -87,7 +92,7 @@ export const api = {
         return realClips;
     } catch (e: any) {
         if (e.name === 'AbortError') {
-          throw new Error("O processamento está levando tempo, mas continua no servidor. Verifique sua Galeria em 5 minutos.");
+          throw new Error("O processamento de clipes longos está levando tempo, mas continua no servidor. Verifique sua Galeria em 5-10 minutos.");
         }
         throw e;
     }
