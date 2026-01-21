@@ -34,7 +34,7 @@ app.use('/temp', express.static(TEMP_DIR, {
 }));
 
 app.get('/health', (req, res) => {
-    res.json({ status: "online", version: "2.4-HEAVY-LOAD-OPTIMIZED" });
+    res.json({ status: "online", version: "2.5-TEXT-FIX-10-CLIPS" });
 });
 
 const VIRAL_HOOKS = [
@@ -58,7 +58,7 @@ const generateHandler = async (req, res) => {
     const sessionID = Date.now();
     const inputPath = path.join(TEMP_DIR, `source_${sessionID}.mp4`);
     
-    console.log(`[JOB] Iniciando geração para ${userId} - Vídeo: ${videoUrl}`);
+    console.log(`[JOB] Iniciando geração de 10 clipes para ${userId}`);
 
     try {
         let minDur = 61, maxDur = 90;
@@ -76,51 +76,52 @@ const generateHandler = async (req, res) => {
             }
         }
 
-        // Primeiro, baixar o vídeo e obter a duração total
         console.log("[STEP 1] Analisando e baixando vídeo...");
         const downloadCmd = `yt-dlp -f "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]" --no-check-certificates --merge-output-format mp4 "${videoUrl}" -o "${inputPath}"`;
 
         exec(downloadCmd, (error) => {
             if (error) {
                 console.error("[ERROR] Download falhou:", error);
-                return res.status(500).json({ error: "Falha ao baixar vídeo do YouTube. Verifique o link." });
+                return res.status(500).json({ error: "Falha ao baixar vídeo. Verifique o link." });
             }
 
             try {
-                // Obter duração real do vídeo baixado
                 const durationInfo = execSync(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${inputPath}"`).toString().trim();
                 const totalVideoDuration = parseFloat(durationInfo);
-                console.log(`[INFO] Duração total do vídeo original: ${totalVideoDuration}s`);
-
+                
                 const clips = [];
-                const numberOfClips = isRandom ? 6 : 10; // Reduzir para 6 se for aleatório longo para evitar timeout extremo
+                const numberOfClips = 10; // FIXO: Sempre 10 clipes
 
                 for (let i = 0; i < numberOfClips; i++) {
                     let finalDuration = isRandom 
                         ? Math.floor(Math.random() * (maxDur - minDur + 1) + minDur)
                         : Math.floor((minDur + maxDur) / 2);
                     
-                    // Garantir que não tentamos cortar além do final do vídeo
-                    let startSec = i * (finalDuration + 2);
+                    // Lógica de distribuição inteligente: tenta espalhar os 10 clipes pelo vídeo
+                    let gap = (totalVideoDuration - finalDuration) / (numberOfClips - 1);
+                    if (gap < 0) gap = 0;
+                    
+                    let startSec = i * gap;
+                    
+                    // Fallback de segurança se o vídeo for muito curto para o gap calculado
                     if (startSec + finalDuration > totalVideoDuration) {
-                        // Se ultrapassar, tenta pegar do final pra trás ou ajustar
-                        startSec = Math.max(0, totalVideoDuration - finalDuration - (i * 2));
+                        startSec = Math.max(0, totalVideoDuration - finalDuration);
                     }
 
                     const timestamp = new Date(startSec * 1000).toISOString().substr(11, 8);
-                    const clipName = `clip_v24_${sessionID}_${i}.mp4`;
+                    const clipName = `clip_v25_${sessionID}_${i}.mp4`;
                     const outputPath = path.join(TEMP_DIR, clipName);
                     
                     const hook = VIRAL_HOOKS[i % VIRAL_HOOKS.length];
                     const color = settings?.subtitleStyle?.color || 'yellow';
                     
-                    // Filtro otimizado: Reduzi um pouco o brilho e aumentei o contraste para vídeos longos não ficarem "lavados"
-                    const complexFilter = `[0:v]crop=ih*9/16:ih,scale=540:960,eq=brightness=0.04:saturation=1.4:contrast=1.2,drawtext=text='${hook}':fontcolor=${color}:fontsize=30:x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.5:boxborderw=8[v]`;
+                    // AJUSTE: fontsize reduzido para 22 para caber em 540px de largura sem transbordar
+                    // boxborderw reduzido para 6 para manter a proporção
+                    const complexFilter = `[0:v]crop=ih*9/16:ih,scale=540:960,eq=brightness=0.04:saturation=1.4:contrast=1.2,drawtext=text='${hook}':fontcolor=${color}:fontsize=22:x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.6:boxborderw=6[v]`;
                     
-                    // COMANDO OTIMIZADO: Resolução reduzida para 540x960 e CRF 32 para renderizar vídeos de 3 minutos mais rápido
-                    const cutCmd = `ffmpeg -ss ${timestamp} -i "${inputPath}" -t ${finalDuration} -filter_complex "${complexFilter}" -map "[v]" -map 0:a? -c:v libx264 -preset ultrafast -crf 32 -pix_fmt yuv420p -movflags +faststart -c:a aac -b:a 96k -y "${outputPath}"`;
+                    const cutCmd = `ffmpeg -ss ${timestamp} -i "${inputPath}" -t ${finalDuration} -filter_complex "${complexFilter}" -map "[v]" -map 0:a? -c:v libx264 -preset ultrafast -crf 30 -pix_fmt yuv420p -movflags +faststart -c:a aac -b:a 128k -y "${outputPath}"`;
                     
-                    console.log(`[RENDER] Clipe ${i+1}/${numberOfClips} (${finalDuration}s) iniciando em ${timestamp}...`);
+                    console.log(`[RENDER] Clipe ${i+1}/10 (${finalDuration}s) em ${timestamp}`);
                     execSync(cutCmd);
                     
                     clips.push({
@@ -134,22 +135,20 @@ const generateHandler = async (req, res) => {
                     });
                 }
 
-                console.log("[SUCCESS] Geração concluída com sucesso!");
                 res.json({ status: "success", clips });
 
-                // Limpeza após 10 minutos
                 setTimeout(() => { 
                     if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath); 
-                }, 600000);
+                }, 900000);
 
             } catch (err) {
-                console.error("[ERRO NO PROCESSO]:", err);
-                res.status(500).json({ error: "O vídeo original é curto demais para a duração escolhida ou o servidor ficou sem memória. Tente durações menores." });
+                console.error("[ERRO]:", err);
+                res.status(500).json({ error: "O vídeo é muito curto para gerar 10 clipes dessa duração ou o servidor sobrecarregou. Tente um vídeo mais longo." });
             }
         });
     } catch (e) {
         console.error("[CRITICAL]:", e);
-        res.status(500).json({ error: "Erro crítico no processamento." });
+        res.status(500).json({ error: "Erro crítico no servidor." });
     }
 };
 
@@ -158,5 +157,5 @@ app.post('/generate-real-clips', generateHandler);
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[SERVER] Motor V2.4 (OTIMIZAÇÃO PESADA) Ativo na porta ${PORT}`);
+    console.log(`[SERVER] Motor V2.5 (SUBTITLE FIX) Ativo`);
 });
