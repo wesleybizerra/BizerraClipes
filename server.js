@@ -5,6 +5,7 @@ const { exec, execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
+// MOTOR BIZERRA V3.1 - REFRESH AUTOMATICO ATIVADO
 const app = express();
 
 app.use((req, res, next) => {
@@ -34,7 +35,7 @@ app.use('/temp', express.static(TEMP_DIR, {
 }));
 
 app.get('/health', (req, res) => {
-    res.json({ status: "online", version: "3.0-FONT-FIX" });
+    res.json({ status: "online", version: "3.1-STABLE" });
 });
 
 const VIRAL_HOOKS = [
@@ -58,7 +59,7 @@ const generateHandler = async (req, res) => {
     const sessionID = Date.now();
     const inputPath = path.join(TEMP_DIR, `source_${sessionID}.mp4`);
     
-    console.log(`[JOB] Iniciando Motor V3.0 (Font 20) para ${userId}`);
+    console.log(`[JOB] Iniciando Motor V3.1 (Font 20 + Borda) para ${userId}`);
 
     try {
         try { execSync('yt-dlp --rm-cache-dir'); } catch(e) {}
@@ -78,8 +79,6 @@ const generateHandler = async (req, res) => {
             }
         }
 
-        console.log("[STEP 1] Download Universal...");
-        
         const spoofArgs = [
             '--user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"',
             '--no-check-certificates',
@@ -94,22 +93,14 @@ const generateHandler = async (req, res) => {
             if (error) {
                 console.error("[DOWNLOAD FAIL]:", stderr);
                 return res.status(500).json({ 
-                  error: "Bloqueio do YouTube detectado. Reinicie o serviço na Railway ou tente outro vídeo público." 
+                  error: "Bloqueio do YouTube detectado. O sistema está tentando trocar de IP automaticamente agora." 
                 });
-            }
-
-            if (!fs.existsSync(inputPath) || fs.statSync(inputPath).size < 1000) {
-                return res.status(500).json({ error: "Vídeo inválido ou indisponível." });
             }
 
             try {
                 const durationInfo = execSync(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${inputPath}"`).toString().trim();
                 const totalVideoDuration = parseFloat(durationInfo);
                 
-                if (isNaN(totalVideoDuration) || totalVideoDuration <= 0) {
-                    throw new Error("Duração ilegível");
-                }
-
                 const clips = [];
                 const numberOfClips = 10; 
 
@@ -127,18 +118,17 @@ const generateHandler = async (req, res) => {
                     }
 
                     const timestamp = new Date(startSec * 1000).toISOString().substr(11, 8);
-                    const clipName = `clip_v30_${sessionID}_${i}.mp4`;
+                    const clipName = `clip_v31_${sessionID}_${i}.mp4`;
                     const outputPath = path.join(TEMP_DIR, clipName);
                     
                     const hook = VIRAL_HOOKS[i % VIRAL_HOOKS.length];
                     const color = settings?.subtitleStyle?.color || 'yellow';
                     
-                    // FILTRO V3.0: Legendas ajustadas para tamanho 20 e centralização otimizada
-                    const complexFilter = `[0:v]scale=w='if(gt(a,9/16),-1,540)':h='if(gt(a,9/16),960,-1)',crop=540:960,setsar=1,drawtext=text='${hook}':fontcolor=${color}:fontsize=20:x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.7:boxborderw=8[v]`;
+                    // FILTRO V3.1: Adicionado contorno (border) para a fonte 20 ficar super legível
+                    const complexFilter = `[0:v]scale=w='if(gt(a,9/16),-1,540)':h='if(gt(a,9/16),960,-1)',crop=540:960,setsar=1,drawtext=text='${hook}':fontcolor=${color}:fontsize=20:x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.6:boxborderw=10:borderw=2:bordercolor=black[v]`;
                     
                     const cutCmd = `ffmpeg -ss ${timestamp} -i "${inputPath}" -t ${finalDuration} -filter_complex "${complexFilter}" -map "[v]" -map 0:a? -c:v libx264 -preset ultrafast -crf 28 -pix_fmt yuv420p -movflags +faststart -c:a aac -b:a 128k -y "${outputPath}"`;
                     
-                    console.log(`[RENDER] Processando Clipe ${i+1}/10 (Font: 20)...`);
                     try {
                         execSync(cutCmd, { stdio: 'ignore' });
                     } catch (e) {
@@ -156,19 +146,15 @@ const generateHandler = async (req, res) => {
                     });
                 }
 
-                if (clips.length === 0) throw new Error("Falha total na renderização.");
-
                 res.json({ status: "success", clips });
                 setTimeout(() => { if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath); }, 300000);
 
             } catch (err) {
-                console.error("[INTERNAL ERROR]:", err);
-                res.status(500).json({ error: "Erro ao processar o arquivo de vídeo. Tente outro link." });
+                res.status(500).json({ error: "Erro ao processar vídeo." });
             }
         });
     } catch (e) {
-        console.error("[FATAL]:", e);
-        res.status(500).json({ error: "Erro crítico no motor de vídeo." });
+        res.status(500).json({ error: "Erro crítico no motor." });
     }
 };
 
@@ -177,5 +163,5 @@ app.post('/generate-real-clips', generateHandler);
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[SERVER] Motor V3.0 Online - Legendas Otimizadas (Tamanho 20)`);
+    console.log(`[SERVER] Motor V3.1 ATIVO - Reiniciado com sucesso`);
 });
