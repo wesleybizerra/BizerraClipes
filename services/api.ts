@@ -18,6 +18,22 @@ export const api = {
     }
   },
 
+  createPreference: async (userId: string, planId: string, planName: string, price: number): Promise<string> => {
+    const response = await fetch(`${BACKEND_URL}/api/create-preference`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, planId, planName, price })
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Falha ao iniciar checkout");
+    }
+    
+    const data = await response.json();
+    return data.init_point;
+  },
+
   getAllUsers: async (): Promise<User[]> => {
     const data = localStorage.getItem('clipflow_db_v1');
     const db = data ? JSON.parse(data) : { users: [] };
@@ -56,8 +72,6 @@ export const api = {
 
   generateClips: async (userId: string, videoFile: File, settings: GenerationSettings): Promise<Clip[]> => {
     const endpoint = `${BACKEND_URL}/api/generate-real-clips`;
-    
-    // Usamos FormData para enviar arquivos
     const formData = new FormData();
     formData.append('video', videoFile);
     formData.append('userId', userId);
@@ -71,23 +85,13 @@ export const api = {
             method: 'POST',
             body: formData,
             signal: controller.signal
-            // Observação: Não definir 'Content-Type' manualmente ao usar FormData, 
-            // o navegador fará isso automaticamente com o boundary correto.
         });
         
         clearTimeout(timeoutId);
-
         const text = await response.text();
         
         if (!response.ok) {
-          let errorMsg = "O servidor encontrou um problema.";
-          try {
-            const errorObj = JSON.parse(text);
-            errorMsg = errorObj.error || errorMsg;
-          } catch (e) {
-            errorMsg = text || errorMsg;
-          }
-          throw new Error(errorMsg);
+          throw new Error("Erro no processamento. Tente novamente.");
         }
         
         const data = JSON.parse(text);
@@ -101,9 +105,6 @@ export const api = {
 
         return realClips;
     } catch (e: any) {
-        if (e.name === 'AbortError') {
-          throw new Error("O processamento excedeu o tempo limite. Verifique sua galeria em alguns minutos.");
-        }
         throw e;
     }
   },
