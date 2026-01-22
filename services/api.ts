@@ -1,21 +1,57 @@
 
-import { User, UserRole, SubscriptionPlan, Clip, GenerationSettings } from '../types.ts';
-import { INITIAL_CREDITS, ADMIN_EMAIL } from '../constants.ts';
+import { User, Clip, GenerationSettings } from '../types.ts';
 
 const RAILWAY_URL = 'https://bizerraclipes-production.up.railway.app'; 
-
-const BACKEND_URL = window.location.hostname === 'localhost' 
-  ? 'http://localhost:10000' 
-  : RAILWAY_URL;
+const BACKEND_URL = window.location.hostname === 'localhost' ? 'http://localhost:10000' : RAILWAY_URL;
 
 export const api = {
   checkHealth: async (): Promise<boolean> => {
     try {
-      const response = await fetch(`${BACKEND_URL}/health`, { mode: 'cors', cache: 'no-store' });
+      const response = await fetch(`${BACKEND_URL}/health`, { mode: 'cors' });
       return response.ok;
-    } catch (e) {
-      return false;
+    } catch (e) { return false; }
+  },
+
+  getAllUsers: async (): Promise<User[]> => {
+    const response = await fetch(`${BACKEND_URL}/api/users`);
+    if (!response.ok) return [];
+    return await response.json();
+  },
+
+  register: async (email: string, name: string, password: string): Promise<User> => {
+    const response = await fetch(`${BACKEND_URL}/api/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, name, password })
+    });
+    if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Erro ao cadastrar.");
     }
+    return await response.json();
+  },
+
+  login: async (email: string, password?: string): Promise<User> => {
+    const response = await fetch(`${BACKEND_URL}/api/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+    });
+    if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Login inválido.");
+    }
+    return await response.json();
+  },
+
+  updateUserCredits: async (userId: string, amount: number): Promise<User> => {
+    const response = await fetch(`${BACKEND_URL}/api/users/${userId}/credits`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount })
+    });
+    if (!response.ok) throw new Error("Erro ao atualizar créditos no servidor.");
+    return await response.json();
   },
 
   createPreference: async (userId: string, planId: string, planName: string, price: number): Promise<string> => {
@@ -24,39 +60,12 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId, planId, planName, price })
     });
-    
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || "Falha ao iniciar checkout");
-    }
-    
+    if (!response.ok) throw new Error("Erro ao gerar link de pagamento.");
     const data = await response.json();
     return data.init_point;
   },
 
-  getAllUsers: async (): Promise<User[]> => {
-    const data = localStorage.getItem('clipflow_db_v1');
-    const db = data ? JSON.parse(data) : { users: [] };
-    return db.users;
-  },
-
-  register: async (email: string, name: string, password: string): Promise<User> => {
-    const data = localStorage.getItem('clipflow_db_v1');
-    const db = data ? JSON.parse(data) : { users: [] };
-    if (db.users.find((u: any) => u.email === email)) throw new Error("E-mail já cadastrado.");
-    const newUser: User = {
-      id: `user-${Date.now()}`,
-      email, name, password,
-      credits: INITIAL_CREDITS,
-      role: email === ADMIN_EMAIL ? UserRole.ADMIN : UserRole.USER,
-      plan: SubscriptionPlan.FREE,
-      createdAt: new Date().toISOString()
-    };
-    db.users.push(newUser);
-    localStorage.setItem('clipflow_db_v1', JSON.stringify(db));
-    return newUser;
-  },
-
+  // Galeria ainda usa localStorage para os clipes do usuário por performance, mas credits vêm do server
   saveGeneratedClips: (userId: string, clips: Clip[]) => {
     const data = localStorage.getItem('clipflow_clips_v1');
     const allClips = data ? JSON.parse(data) : [];
@@ -71,68 +80,26 @@ export const api = {
   },
 
   generateClips: async (userId: string, videoFile: File, settings: GenerationSettings): Promise<Clip[]> => {
-    const endpoint = `${BACKEND_URL}/api/generate-real-clips`;
     const formData = new FormData();
     formData.append('video', videoFile);
     formData.append('userId', userId);
-    formData.append('settings', JSON.stringify(settings));
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 900000); 
+    const response = await fetch(`${BACKEND_URL}/api/generate-real-clips`, {
+        method: 'POST',
+        body: formData
+    });
+    
+    if (!response.ok) throw new Error("Erro no processamento do vídeo.");
+    
+    const data = await response.json();
+    const realClips: Clip[] = data.clips.map((c: any) => ({
+        ...c,
+        videoUrl: `${BACKEND_URL}${c.videoUrl}`
+    }));
 
-    try {
-        const response = await fetch(endpoint, {
-            method: 'POST',
-            body: formData,
-            signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        const text = await response.text();
-        
-        if (!response.ok) {
-          throw new Error("Erro no processamento. Tente novamente.");
-        }
-        
-        const data = JSON.parse(text);
-        const realClips: Clip[] = data.clips.map((c: any) => ({
-            ...c,
-            videoUrl: c.videoUrl.startsWith('http') ? c.videoUrl : `${BACKEND_URL}${c.videoUrl}`
-        }));
+    api.saveGeneratedClips(userId, realClips);
+    await api.updateUserCredits(userId, -10); // Descontar 10 créditos no SERVIDOR
 
-        api.saveGeneratedClips(userId, realClips);
-        api.updateUserCredits(userId, -10).catch(() => {});
-
-        return realClips;
-    } catch (e: any) {
-        throw e;
-    }
-  },
-
-  login: async (email: string, password?: string): Promise<User> => {
-    const data = localStorage.getItem('clipflow_db_v1');
-    const db = data ? JSON.parse(data) : { users: [] };
-    const user = db.users.find((u: any) => u.email === email);
-    if (!user) throw new Error("Usuário não encontrado");
-    return user;
-  },
-  
-  updateUserCredits: async (userId: string, amount: number): Promise<User> => {
-      const data = localStorage.getItem('clipflow_db_v1');
-      const db = data ? JSON.parse(data) : { users: [] };
-      let userIndex = db.users.findIndex((u: any) => u.id === userId);
-      
-      if (userIndex === -1) {
-          const sessionUser = JSON.parse(localStorage.getItem('clipflow_user') || '{}');
-          if (sessionUser.email) userIndex = db.users.findIndex((u: any) => u.email === sessionUser.email);
-      }
-
-      if (userIndex !== -1) {
-          db.users[userIndex].credits += amount;
-          localStorage.setItem('clipflow_db_v1', JSON.stringify(db));
-          localStorage.setItem('clipflow_user', JSON.stringify(db.users[userIndex]));
-          return db.users[userIndex];
-      }
-      throw new Error("Usuário não encontrado");
+    return realClips;
   }
 };
