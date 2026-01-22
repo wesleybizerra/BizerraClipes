@@ -57,8 +57,9 @@ export const api = {
   generateClips: async (userId: string, videoUrl: string, settings: GenerationSettings): Promise<Clip[]> => {
     const endpoint = `${BACKEND_URL}/api/generate-real-clips`;
     
+    // Timeout estendido para 15 minutos (900.000ms) para vídeos longos
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 600000); 
+    const timeoutId = setTimeout(() => controller.abort(), 900000); 
 
     try {
         const response = await fetch(endpoint, {
@@ -70,17 +71,20 @@ export const api = {
         
         clearTimeout(timeoutId);
 
+        const text = await response.text();
+        
         if (!response.ok) {
-          const text = await response.text();
+          let errorMsg = "O servidor encontrou um problema.";
           try {
             const errorObj = JSON.parse(text);
-            throw new Error(errorObj.error || "Erro no servidor");
-          } catch (jsonErr) {
-            throw new Error(text || "O servidor demorou muito. Verifique a Galeria em instantes.");
+            errorMsg = errorObj.error || errorMsg;
+          } catch (e) {
+            errorMsg = text || errorMsg;
           }
+          throw new Error(errorMsg);
         }
         
-        const data = await response.json();
+        const data = JSON.parse(text);
         const realClips: Clip[] = data.clips.map((c: any) => ({
             ...c,
             videoUrl: c.videoUrl.startsWith('http') ? c.videoUrl : `${BACKEND_URL}${c.videoUrl}`
@@ -92,7 +96,7 @@ export const api = {
         return realClips;
     } catch (e: any) {
         if (e.name === 'AbortError') {
-          throw new Error("O processamento de clipes longos está levando tempo, mas continua no servidor. Verifique sua Galeria em 5-10 minutos.");
+          throw new Error("O processamento excedeu o tempo limite. Verifique sua galeria em alguns minutos, os vídeos podem aparecer lá assim que terminarem.");
         }
         throw e;
     }
