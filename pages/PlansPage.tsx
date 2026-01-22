@@ -1,19 +1,25 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PLANS } from '../constants.ts';
+import { useAuth } from '../AuthContext.tsx';
+import { api } from '../services/api.ts';
 
 const PlansPage: React.FC = () => {
-  const WHATSAPP_LINKS: Record<string, string> = {
-    'CLASSIC': 'https://api.whatsapp.com/send/?phone=5571981574664&text=Bom+dia%2C+Boa+tarde%2C+Boa+noite.+Quero+o+Plano+Classico+de+R$10.00&type=phone_number&app_absent=0',
-    'MEDIUM': 'https://api.whatsapp.com/send/?phone=5571981574664&text=Bom+dia%2C+Boa+tarde%2C+Boa+noite.+Quero+o+Plano+Medio+de+R$20.00&type=phone_number&app_absent=0',
-    'PROFESSIONAL': 'https://api.whatsapp.com/send/?phone=5571981574664&text=Bom+dia%2C+Boa+tarde%2C+Boa+noite.+Quero+o+Plano+Profissional+de+R$30.00&type=phone_number&app_absent=0'
-  };
+  const { user } = useAuth();
+  const [loadingPlanId, setLoadingPlanId] = useState<string | null>(null);
 
-  const handleWhatsAppRedirect = (planId: string) => {
-    const link = WHATSAPP_LINKS[planId];
-    if (link) {
-      window.open(link, '_blank');
+  const handlePurchase = async (plan: any) => {
+    if (!user) return alert("Você precisa estar logado.");
+    
+    setLoadingPlanId(plan.id);
+    try {
+      const checkoutUrl = await api.createPreference(user.id, plan.id, plan.name, plan.price);
+      window.location.href = checkoutUrl;
+    } catch (err: any) {
+      alert("Erro ao iniciar pagamento: " + err.message);
+    } finally {
+      setLoadingPlanId(null);
     }
   };
 
@@ -26,7 +32,7 @@ const PlansPage: React.FC = () => {
            </Link>
            <div className="text-center md:text-right order-1 md:order-2">
              <h1 className="text-4xl md:text-6xl font-black tracking-tighter">Escolha seu Poder ⚡</h1>
-             <p className="text-slate-400 mt-2 font-medium">Multiplique seu alcance em tempo recorde.</p>
+             <p className="text-slate-400 mt-2 font-medium">Recarregue seus créditos com segurança via Mercado Pago.</p>
            </div>
         </div>
 
@@ -60,35 +66,37 @@ const PlansPage: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-3 font-bold text-sm">
                   <i className="fa-solid fa-check text-green-500"></i>
-                  Processamento Prioritário
+                  Acesso Vitalício aos Clipes
                 </div>
                 <div className="flex items-center gap-3 font-bold text-sm">
                   <i className="fa-solid fa-check text-green-500"></i>
-                  Legendas Premium AI
+                  Processamento em 4K (Se original)
                 </div>
               </div>
 
               <button 
-                onClick={() => handleWhatsAppRedirect(plan.id)}
+                onClick={() => handlePurchase(plan)}
+                disabled={loadingPlanId !== null}
                 className={`
                   mt-auto w-full font-black py-5 rounded-[24px] transition-all active:scale-95 flex items-center justify-center gap-2
                   ${plan.highlight ? 'bg-green-500 text-slate-950 hover:bg-green-400' : 'bg-white text-slate-950 hover:bg-slate-200'}
+                  disabled:opacity-50
                 `}
               >
-                <i className="fa-brands fa-whatsapp text-xl"></i>
-                OBTER AGORA
+                {loadingPlanId === plan.id ? (
+                  <i className="fa-solid fa-circle-notch animate-spin text-xl"></i>
+                ) : (
+                  <>
+                    <i className="fa-solid fa-shield-check text-xl"></i>
+                    OBTER AGORA
+                  </>
+                )}
               </button>
+              <p className="text-[10px] text-center mt-4 text-slate-600 font-bold uppercase tracking-widest">
+                Pagamento Seguro via Mercado Pago
+              </p>
             </div>
           ))}
-        </div>
-
-        <div className="mt-20 text-center bg-slate-900/50 border border-slate-800/50 rounded-[40px] p-10 max-w-4xl mx-auto">
-          <h4 className="text-xl font-black mb-4 italic">Por que investir?</h4>
-          <p className="text-slate-400 text-sm leading-relaxed">
-            Cada geração custa apenas 10 créditos. Com o plano profissional, você consegue criar 300 clipes virais. 
-            Se apenas 1 clipe viralizar, seu investimento já se pagou centenas de vezes. 
-            <strong> O tempo é seu ativo mais precioso. Automatize-o com Bizerra Clipes.</strong>
-          </p>
         </div>
       </div>
     </div>
