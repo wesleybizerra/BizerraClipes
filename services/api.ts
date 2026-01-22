@@ -54,19 +54,25 @@ export const api = {
     return userId ? allClips.filter((c: any) => c.userId === userId) : allClips;
   },
 
-  generateClips: async (userId: string, videoUrl: string, settings: GenerationSettings): Promise<Clip[]> => {
+  generateClips: async (userId: string, videoFile: File, settings: GenerationSettings): Promise<Clip[]> => {
     const endpoint = `${BACKEND_URL}/api/generate-real-clips`;
     
-    // Timeout estendido para 15 minutos (900.000ms) para vídeos longos
+    // Usamos FormData para enviar arquivos
+    const formData = new FormData();
+    formData.append('video', videoFile);
+    formData.append('userId', userId);
+    formData.append('settings', JSON.stringify(settings));
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 900000); 
 
     try {
         const response = await fetch(endpoint, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId, videoUrl, settings }),
+            body: formData,
             signal: controller.signal
+            // Observação: Não definir 'Content-Type' manualmente ao usar FormData, 
+            // o navegador fará isso automaticamente com o boundary correto.
         });
         
         clearTimeout(timeoutId);
@@ -96,7 +102,7 @@ export const api = {
         return realClips;
     } catch (e: any) {
         if (e.name === 'AbortError') {
-          throw new Error("O processamento excedeu o tempo limite. Verifique sua galeria em alguns minutos, os vídeos podem aparecer lá assim que terminarem.");
+          throw new Error("O processamento excedeu o tempo limite. Verifique sua galeria em alguns minutos.");
         }
         throw e;
     }
