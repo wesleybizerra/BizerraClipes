@@ -5,7 +5,7 @@ const { exec, execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-// MOTOR BIZERRA V5.1 - STABILITY & PRECISION (FONT 12 - RODAPÉ)
+// MOTOR BIZERRA V5.5 - ROBUST ULTRA-CLEAN (FONT 12 ONLY)
 const app = express();
 
 app.use(cors({ origin: '*', methods: ['GET', 'POST'] }));
@@ -18,8 +18,8 @@ if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 
 app.use('/temp', express.static(TEMP_DIR));
 
-// Quebra de linha para legenda 12px (máximo 40 caracteres para não estourar 540px)
-function wrapSubtitle(text, maxChars = 40) {
+// Quebra de linha inteligente para fonte 12 (máximo 45 caracteres)
+function wrapSubtitle(text, maxChars = 45) {
     const words = text.split(' ');
     let lines = [];
     let currentLine = "";
@@ -36,18 +36,18 @@ function wrapSubtitle(text, maxChars = 40) {
     return lines.join('\n').replace(/'/g, "'\\\\\\''").replace(/:/g, '\\:');
 }
 
-// Banco de frases curtas para legendas profissionais (tamanho 12)
+// Legendas profissionais simuladas (Tamanho 12)
 const CAPTIONS = [
-    "A disciplina é a base de todo sucesso.",
-    "O conhecimento aplicado gera riqueza real.",
-    "O segredo está na consistência diária.",
-    "Mude sua mentalidade para mudar sua vida.",
-    "O fracasso é o combustível dos campeões.",
-    "Foque no longo prazo, o resto é distração.",
-    "Sua rotina define o seu futuro financeiro.",
-    "Trabalhe enquanto eles dormem, estude enquanto festejam.",
-    "Oportunidades não surgem, você as cria.",
-    "Seja a sua melhor versão todos os dias."
+    "O sucesso é construído nos detalhes que ninguém vê.",
+    "A disciplina vence o talento quando o talento não tem disciplina.",
+    "Mude sua rotina e você mudará o seu destino financeiro.",
+    "O conhecimento aplicado é a única forma real de riqueza.",
+    "Não espere o momento perfeito, pegue o momento e torne-o perfeito.",
+    "Foque em ser produtivo, não em estar apenas ocupado.",
+    "Seu maior investimento é em você mesmo, sempre.",
+    "A consistência é o que transforma o comum em extraordinário.",
+    "Aprenda a investir antes de aprender a gastar.",
+    "Grandes conquistas exigem grandes sacrifícios diários."
 ];
 
 const generateHandler = async (req, res) => {
@@ -57,7 +57,7 @@ const generateHandler = async (req, res) => {
     const sessionID = Date.now();
     const inputPath = path.join(TEMP_DIR, `source_${sessionID}.mp4`);
     
-    console.log(`[JOB] Motor V5.1 iniciado - FONT 12 - USER: ${userId}`);
+    console.log(`[JOB] Motor V5.5 Iniciado - Fonte 12 - Sem Texto Central`);
 
     try {
         let minDur = 61, maxDur = 90;
@@ -67,83 +67,80 @@ const generateHandler = async (req, res) => {
             maxDur = parts[1] || parts[0];
         }
 
-        let spoofArgs = [
-            '--no-check-certificates',
-            '--geo-bypass',
-            '--format "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"',
-            '--user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"'
-        ];
+        // COMANDO ROBUSTO: Prioriza MP4 e evita erros de merge que travam o download
+        let downloadCmd = `yt-dlp -f "best[ext=mp4]/best" --no-playlist --no-check-certificates --geo-bypass --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" "${videoUrl}" -o "${inputPath}"`;
 
-        if (fs.existsSync(COOKIES_PATH)) spoofArgs.push(`--cookies "${COOKIES_PATH}"`);
+        if (fs.existsSync(COOKIES_PATH)) {
+            downloadCmd = `yt-dlp -f "best[ext=mp4]/best" --cookies "${COOKIES_PATH}" --no-playlist --no-check-certificates "${videoUrl}" -o "${inputPath}"`;
+        }
 
-        const downloadCmd = `yt-dlp ${spoofArgs.join(' ')} --merge-output-format mp4 "${videoUrl}" -o "${inputPath}"`;
-
-        exec(downloadCmd, { timeout: 120000 }, (error) => {
+        exec(downloadCmd, { timeout: 300000 }, (error) => {
             if (error) {
-                console.error("[ERROR] Download falhou:", error);
-                return res.status(500).json({ error: "Download falhou. Verifique o link ou cookies.txt." });
+                console.error("[ERROR] Falha crítica no Download:", error.message);
+                return res.status(500).json({ error: "O YouTube bloqueou o download. Verifique se o link é público ou tente outro vídeo." });
             }
 
             try {
+                if (!fs.existsSync(inputPath)) throw new Error("Arquivo não encontrado após download.");
+
                 const durationInfo = execSync(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${inputPath}"`).toString().trim();
                 const totalVideoDuration = parseFloat(durationInfo);
                 const clips = [];
                 
-                // Reduzido para 4 clipes por vez para evitar TIMEOUT do servidor/navegador
-                const numClips = 4; 
+                // Gerando 5 clipes para garantir velocidade e não estourar memória
+                const numClips = 5; 
 
                 for (let i = 0; i < numClips; i++) {
                     let finalDuration = Math.floor(Math.random() * (maxDur - minDur + 1) + minDur);
-                    let startSec = Math.floor(Math.random() * (totalVideoDuration - finalDuration));
+                    let startSec = Math.floor(Math.random() * (totalVideoDuration - finalDuration - 5)) + 2;
                     
                     const timestamp = new Date(startSec * 1000).toISOString().substr(11, 8);
-                    const clipName = `clip_v51_${sessionID}_${i}.mp4`;
+                    const clipName = `clip_v55_${sessionID}_${i}.mp4`;
                     const outputPath = path.join(TEMP_DIR, clipName);
                     
                     const rawText = CAPTIONS[Math.floor(Math.random() * CAPTIONS.length)];
-                    const wrappedSubtitle = wrapSubtitle(rawText, 35); 
+                    const wrappedSubtitle = wrapSubtitle(rawText, 40); 
                     const color = settings?.subtitleStyle?.color || 'white';
                     
-                    // FILTRO V5.1: ZERO TEXTO CENTRAL. 
-                    // Fonte 12 (exata), posição rodapé, sem caixa (box=0) para visual clean.
-                    const complexFilter = `[0:v]scale=w=540:h=960:force_original_aspect_ratio=increase,crop=540:960,setsar=1,drawtext=text='${wrappedSubtitle}':fontcolor=${color}:fontsize=12:x=(w-text_w)/2:y=h-100:shadowcolor=black@0.9:shadowx=1:shadowy=1:line_spacing=4[v]`;
+                    // FILTRO V5.5: ABSOLUTAMENTE NADA NO MEIO. 
+                    // Fonte 12 (exata), posição rodapé (y=h-110), sem caixa para visual limpo.
+                    const complexFilter = `[0:v]scale=w=540:h=960:force_original_aspect_ratio=increase,crop=540:960,setsar=1,drawtext=text='${wrappedSubtitle}':fontcolor=${color}:fontsize=12:x=(w-text_w)/2:y=h-110:shadowcolor=black@0.8:shadowx=1:shadowy=1:line_spacing=4[v]`;
                     
-                    const cutCmd = `ffmpeg -ss ${timestamp} -i "${inputPath}" -t ${finalDuration} -filter_complex "${complexFilter}" -map "[v]" -map 0:a? -c:v libx264 -preset ultrafast -crf 28 -c:a aac -b:a 96k -y "${outputPath}"`;
+                    const cutCmd = `ffmpeg -ss ${timestamp} -i "${inputPath}" -t ${finalDuration} -filter_complex "${complexFilter}" -map "[v]" -map 0:a? -c:v libx264 -preset ultrafast -crf 28 -c:a aac -b:a 128k -y "${outputPath}"`;
                     
                     try {
-                        execSync(cutCmd, { timeout: 90000 });
+                        execSync(cutCmd, { timeout: 180000 });
                         clips.push({
                             id: `clip-${sessionID}-${i}`,
-                            title: `Corte Viral ${i+1}`,
+                            title: `Corte Profissional ${i+1}`,
                             videoUrl: `/temp/${clipName}`,
                             thumbnail: `https://picsum.photos/seed/${sessionID + i}/400/700`,
                             duration: finalDuration.toString()
                         });
                     } catch (e) { 
-                        console.error(`[ERROR] Falha no corte ${i}:`, e.message);
+                        console.error(`[ERROR] Falha no clipe ${i}:`, e.message);
                         continue; 
                     }
                 }
 
-                if (clips.length === 0) throw new Error("Nenhum clipe pôde ser gerado.");
+                if (clips.length === 0) throw new Error("Não foi possível processar os cortes.");
 
                 res.json({ status: "success", clips });
                 
-                // Limpeza agendada
-                setTimeout(() => { if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath); }, 300000);
+                // Limpeza em 10 minutos
+                setTimeout(() => { if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath); }, 600000);
             } catch (err) { 
-                console.error("[ERROR] Processamento FFmpeg:", err);
-                res.status(500).json({ error: "O vídeo é muito pesado ou o servidor esgotou a memória." }); 
+                console.error("[ERROR] Falha no FFmpeg:", err.message);
+                res.status(500).json({ error: "Erro ao renderizar vídeos. Tente um vídeo mais curto ou com menor resolução." }); 
             }
         });
     } catch (e) { 
-        console.error("[ERROR] Falha geral Motor V5.1:", e);
-        res.status(500).json({ error: "Falha crítica no Motor V5.1." }); 
+        res.status(500).json({ error: "Erro geral no Motor V5.5." }); 
     }
 };
 
 app.post('/api/generate-real-clips', generateHandler);
-app.get('/health', (req, res) => res.json({ status: "running", engine: "V5.1-Speed" }));
+app.get('/health', (req, res) => res.json({ status: "online", version: "5.5-Stable" }));
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, '0.0.0.0', () => console.log(`Motor V5.1 (Fonte 12) Online na porta ${PORT}`));
+app.listen(PORT, '0.0.0.0', () => console.log(`Motor V5.5 Online - Rodapé 12px`));
