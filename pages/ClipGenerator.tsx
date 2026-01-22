@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { api } from '../services/api';
@@ -7,13 +7,14 @@ import { Clip, GenerationSettings } from '../types';
 
 const ClipGenerator: React.FC = () => {
   const { user, refreshUser } = useAuth();
-  const [videoInput, setVideoInput] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [duration, setDuration] = useState<GenerationSettings['durationRange']>('120-150');
   const [subtitleColor, setSubtitleColor] = useState('white');
   const [isProcessing, setIsProcessing] = useState(false);
   const [clips, setClips] = useState<Clip[]>([]);
   const [status, setStatus] = useState('');
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
   if (!user) return null;
@@ -26,22 +27,33 @@ const ClipGenerator: React.FC = () => {
     { label: 'Misto', value: '60-180' },
   ];
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      if (file.size > 200 * 1024 * 1024) {
+        alert("O arquivo é muito grande! Limite de 200MB.");
+        return;
+      }
+      setSelectedFile(file);
+    }
+  };
+
   const handleGenerate = async () => {
-    if (!videoInput) return alert("Insira um link do YouTube");
+    if (!selectedFile) return alert("Selecione um vídeo para enviar");
     if (user.credits < 10) return navigate('/planos');
 
     setIsProcessing(true);
-    setStatus('Iniciando Motor V5.1 (High Speed)...');
+    setStatus('Iniciando Upload Seguro...');
     
     try {
       const statuses = [
-        'Conectando ao YouTube (Anti-Block)...',
-        'Baixando vídeo base...',
+        'Enviando vídeo para o servidor...',
+        'Analisando metadados do arquivo...',
         'Formatando para 540x960 (Vertical)...',
-        'Removendo camadas de texto central...',
+        'Extraindo melhores momentos...',
         'Aplicando Legendas Tamanho 12 (Clean)...',
-        'Renderizando clipes de longa duração...',
-        'Finalizando pack prioritário...'
+        'Renderizando cortes de alta qualidade...',
+        'Finalizando seu pack de clipes...'
       ];
 
       let statusIdx = 0;
@@ -50,9 +62,9 @@ const ClipGenerator: React.FC = () => {
           setStatus(statuses[statusIdx]);
           statusIdx++;
         }
-      }, 12000); // Maior intervalo para refletir a realidade do processamento
+      }, 10000); 
 
-      const generated = await api.generateClips(user.id, videoInput, {
+      const generated = await api.generateClips(user.id, selectedFile, {
         durationRange: duration,
         subtitleStyle: { color: subtitleColor, size: 'small', hasShadow: true }
       });
@@ -61,7 +73,7 @@ const ClipGenerator: React.FC = () => {
       setClips(generated);
       refreshUser();
     } catch (err: any) {
-      alert("Aviso: " + err.message + "\n\nSe o vídeo for muito longo (120-150s), o processamento pode demorar até 5 minutos. Verifique sua galeria em breve.");
+      alert("Aviso: " + err.message);
     } finally {
       setIsProcessing(false);
       setStatus('');
@@ -103,28 +115,45 @@ const ClipGenerator: React.FC = () => {
         <div className="max-w-6xl mx-auto">
           <header className="mb-10">
             <h1 className="text-3xl md:text-5xl font-black tracking-tight flex items-center gap-3">
-               Motor V5.1 <span className="bg-white/10 text-white text-[10px] px-3 py-1 rounded-full border border-white/20 uppercase">Fonte 12 Fixa</span>
+               Motor V6.0 <span className="bg-white/10 text-white text-[10px] px-3 py-1 rounded-full border border-white/20 uppercase">Upload Ativado</span>
             </h1>
-            <p className="text-slate-500 mt-2 font-medium">Sem textos centrais. Apenas legendas discretas de tamanho 12 no rodapé.</p>
+            <p className="text-slate-500 mt-2 font-medium">Envie seu vídeo MP4 e deixe nossa IA fazer os cortes automáticos.</p>
           </header>
 
           {!isProcessing && clips.length === 0 && (
             <div className="bg-slate-900 border border-slate-800 rounded-[40px] p-8 md:p-12 max-w-4xl mx-auto shadow-2xl">
               <div className="space-y-8">
                 <div>
-                  <label className="block text-xl font-black mb-4">Link do YouTube</label>
-                  <input 
-                    type="text"
-                    placeholder="https://youtube.com/..."
-                    className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-6 py-6 outline-none transition text-lg font-medium"
-                    value={videoInput}
-                    onChange={e => setVideoInput(e.target.value)}
-                  />
+                  <label className="block text-xl font-black mb-4 flex items-center gap-2">Selecione o Vídeo (MP4/MOV)</label>
+                  <div 
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`
+                      w-full border-2 border-dashed rounded-3xl p-10 flex flex-col items-center justify-center cursor-pointer transition-all
+                      ${selectedFile ? 'border-green-500 bg-green-500/5' : 'border-slate-800 hover:border-slate-700 bg-slate-950'}
+                    `}
+                  >
+                    <input 
+                      type="file" 
+                      ref={fileInputRef} 
+                      className="hidden" 
+                      accept="video/*" 
+                      onChange={handleFileChange} 
+                    />
+                    <i className={`fa-solid ${selectedFile ? 'fa-file-video text-green-500' : 'fa-cloud-arrow-up text-slate-700'} text-5xl mb-4`}></i>
+                    <p className={`text-lg font-bold ${selectedFile ? 'text-white' : 'text-slate-500'}`}>
+                      {selectedFile ? selectedFile.name : 'Arraste ou clique para selecionar'}
+                    </p>
+                    {selectedFile && (
+                      <p className="text-green-500/50 text-xs mt-2 font-black uppercase">
+                        {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB - Pronto para processar
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div>
-                    <label className="block text-sm font-bold text-slate-400 mb-4 uppercase tracking-widest">Duração (Cortes Longos)</label>
+                    <label className="block text-sm font-bold text-slate-400 mb-4 uppercase tracking-widest">Duração por Corte</label>
                     <div className="grid grid-cols-2 gap-2">
                       {durationOptions.map(opt => (
                         <button 
@@ -139,7 +168,7 @@ const ClipGenerator: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-bold text-slate-400 mb-4 uppercase tracking-widest">Cor das Letras (12px)</label>
+                    <label className="block text-sm font-bold text-slate-400 mb-4 uppercase tracking-widest">Estilo Clean (12px)</label>
                     <div className="flex gap-3">
                       {['white', 'yellow', '#4ade80', '#00e5ff'].map(c => (
                         <button 
@@ -155,8 +184,8 @@ const ClipGenerator: React.FC = () => {
 
                 <div className="pt-4">
                   <button onClick={handleGenerate} className="w-full bg-green-500 text-slate-950 font-black text-2xl py-7 rounded-3xl hover:bg-green-400 transition-all shadow-2xl flex items-center justify-center gap-4">
-                    <i className="fa-solid fa-play"></i>
-                    INICIAR PRODUÇÃO V5.1
+                    <i className="fa-solid fa-rocket"></i>
+                    GERAR CLIPES DO UPLOAD
                   </button>
                 </div>
               </div>
@@ -167,7 +196,7 @@ const ClipGenerator: React.FC = () => {
             <div className="flex flex-col items-center justify-center min-h-[50vh] text-center">
               <div className="w-24 h-24 border-[8px] border-slate-800 border-t-green-500 rounded-full animate-spin mb-8"></div>
               <h2 className="text-3xl font-black text-white mb-4 tracking-tighter uppercase">{status}</h2>
-              <p className="text-slate-500 font-medium">Clipes de 150 segundos exigem maior tempo de renderização. Aguarde...</p>
+              <p className="text-slate-500 font-medium">Arquivos grandes podem demorar para serem transmitidos. Não feche a aba.</p>
             </div>
           )}
 
@@ -187,7 +216,7 @@ const ClipGenerator: React.FC = () => {
                     <button onClick={() => {
                         const a = document.createElement('a');
                         a.href = clip.videoUrl;
-                        a.download = `corte_bizerra_v51.mp4`;
+                        a.download = `corte_bizerra_upload.mp4`;
                         a.click();
                     }} className="w-full bg-slate-950 hover:bg-green-500 hover:text-slate-950 text-white font-black py-4 rounded-2xl transition text-[10px] border border-slate-800 flex items-center justify-center gap-2">
                       <i className="fa-solid fa-download"></i> BAIXAR CORTE
