@@ -11,6 +11,7 @@ const Gallery: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
 
   const loadClips = async () => {
@@ -27,7 +28,7 @@ const Gallery: React.FC = () => {
 
   useEffect(() => {
     loadClips();
-    const interval = setInterval(loadClips, 15000);
+    const interval = setInterval(loadClips, 30000);
     return () => clearInterval(interval);
   }, [user]);
 
@@ -37,15 +38,27 @@ const Gallery: React.FC = () => {
     c.title.toLowerCase().includes(filter.toLowerCase())
   );
 
-  const downloadClip = (clip: Clip) => {
-    // Método de download mais direto e compatível
-    const link = document.createElement('a');
-    link.href = clip.videoUrl;
-    link.setAttribute('download', `${clip.title.substring(0, 20)}.mp4`);
-    link.setAttribute('target', '_blank');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const downloadClip = async (clip: Clip) => {
+    setDownloadingId(clip.id);
+    try {
+      // Método robusto: baixa como blob para contornar bloqueios de CORS em download direto
+      const response = await fetch(clip.videoUrl);
+      if (!response.ok) throw new Error("Arquivo expirou ou servidor indisponível.");
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `bizerra_clipe_${clip.id}.mp4`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      alert("Erro ao baixar: O arquivo pode ter expirado (limite de 20 horas). Gere o clipe novamente.");
+    } finally {
+      setDownloadingId(null);
+    }
   };
 
   return (
@@ -65,6 +78,7 @@ const Gallery: React.FC = () => {
               controls 
               autoPlay
               playsInline
+              crossOrigin="anonymous"
             />
           </div>
         </div>
@@ -108,9 +122,9 @@ const Gallery: React.FC = () => {
             <div>
               <div className="flex items-center gap-3 mb-2">
                 <h1 className="text-3xl md:text-5xl font-black tracking-tighter">Minha Galeria</h1>
-                <span className="bg-green-500/10 text-green-500 text-[10px] font-black px-2 py-1 rounded border border-green-500/20">GALERIA NATIVA</span>
+                <span className="bg-green-500/10 text-green-500 text-[10px] font-black px-2 py-1 rounded border border-green-500/20 uppercase">Arquivos ativos por 20h</span>
               </div>
-              <p className="text-slate-400">Clique em um vídeo para assistir ou baixar o arquivo original.</p>
+              <p className="text-slate-400">Aqui estão seus últimos clipes gerados. Baixe-os para suas redes sociais.</p>
             </div>
             
             <div className="w-full md:w-auto flex flex-col sm:flex-row gap-4">
@@ -118,7 +132,7 @@ const Gallery: React.FC = () => {
                 <i className="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"></i>
                 <input 
                   type="text" 
-                  placeholder="Buscar clipe..."
+                  placeholder="Filtrar por nome..."
                   className="w-full sm:w-64 bg-slate-900 border border-slate-800 rounded-2xl pl-12 pr-4 py-3 focus:ring-2 focus:ring-green-500/50 outline-none transition text-sm"
                   value={filter}
                   onChange={e => setFilter(e.target.value)}
@@ -136,18 +150,18 @@ const Gallery: React.FC = () => {
           {loading ? (
             <div className="flex flex-col items-center justify-center min-h-[40vh]">
               <div className="w-12 h-12 border-4 border-slate-800 border-t-green-500 rounded-full animate-spin mb-4"></div>
-              <p className="text-slate-500 font-bold">Acessando biblioteca segura...</p>
+              <p className="text-slate-500 font-bold">Carregando seus vídeos...</p>
             </div>
           ) : filteredClips.length === 0 ? (
             <div className="bg-slate-900/50 border border-slate-800 border-dashed rounded-[40px] p-20 text-center">
-              <h3 className="text-2xl font-black mb-2">Nenhum vídeo encontrado</h3>
-              <p className="text-slate-500 mb-8">Comece agora no gerador!</p>
-              <Link to="/gerador" className="bg-green-500 text-slate-950 px-10 py-4 rounded-2xl font-black">
-                VOLTAR AO GERADOR
+              <h3 className="text-2xl font-black mb-2">Sua galeria está vazia</h3>
+              <p className="text-slate-500 mb-8">Vá ao gerador para criar seus primeiros cortes virais.</p>
+              <Link to="/gerador" className="bg-green-500 text-slate-950 px-10 py-4 rounded-2xl font-black hover:bg-green-400 transition-colors">
+                ABRIR GERADOR
               </Link>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate-in fade-in duration-500">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {filteredClips.map((clip) => (
                 <div key={clip.id} className="bg-slate-900 border border-slate-800 rounded-[32px] overflow-hidden group hover:border-green-500/50 hover:shadow-2xl transition-all duration-300">
                   <div className="aspect-[9/16] relative bg-black overflow-hidden">
@@ -156,21 +170,26 @@ const Gallery: React.FC = () => {
                     <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition duration-300 bg-black/40">
                       <button 
                         onClick={() => setSelectedVideo(clip.videoUrl)}
-                        className="w-16 h-16 bg-white text-slate-950 rounded-full text-2xl flex items-center justify-center shadow-2xl"
+                        className="w-16 h-16 bg-white text-slate-950 rounded-full text-2xl flex items-center justify-center shadow-2xl hover:scale-110 transition-transform"
                       >
                         <i className="fa-solid fa-play ml-1"></i>
                       </button>
                     </div>
                     <div className="absolute top-4 right-4 bg-black/60 px-3 py-1 rounded-full text-[10px] font-black">{clip.duration}s</div>
                   </div>
-                  <div className="p-5 text-center">
-                    <h3 className="font-bold text-white text-xs mb-4 line-clamp-1">{clip.title}</h3>
+                  <div className="p-5">
+                    <h3 className="font-bold text-white text-sm mb-4 line-clamp-1">{clip.title}</h3>
                     <button 
                       onClick={() => downloadClip(clip)}
-                      className="w-full bg-slate-950 hover:bg-green-500 hover:text-slate-950 text-white font-black py-3 rounded-xl transition-all border border-slate-800 text-[10px]"
+                      disabled={downloadingId === clip.id}
+                      className="w-full bg-slate-950 hover:bg-green-500 hover:text-slate-950 text-white font-black py-3 rounded-xl transition-all border border-slate-800 text-[10px] flex items-center justify-center gap-2"
                     >
-                      <i className="fa-solid fa-download mr-2"></i>
-                      BAIXAR VÍDEO MP4
+                      {downloadingId === clip.id ? (
+                        <i className="fa-solid fa-circle-notch animate-spin"></i>
+                      ) : (
+                        <i className="fa-solid fa-download"></i>
+                      )}
+                      BAIXAR MP4
                     </button>
                   </div>
                 </div>
