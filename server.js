@@ -17,15 +17,13 @@ const mpClient = process.env.MP_ACCESS_TOKEN
 app.use(cors({ origin: '*', methods: ['GET', 'POST', 'PUT'] }));
 app.use(express.json());
 
-// BANCO DE DADOS EM MEMÓRIA (Centralizado para o Admin ver todos)
-// Nota: Em produção real, use um banco de dados como MongoDB ou PostgreSQL.
-// Aqui, os dados ficam no servidor enquanto ele estiver ligado no Railway.
+// BANCO DE DADOS EM MEMÓRIA
 let usersDB = [
   {
     id: 'admin-1',
     name: 'Admin Bizerra',
     email: 'wesleybizerra@hotmail.com',
-    password: '123', // Em produção, use hash de senha
+    password: '123',
     credits: 9999,
     role: 'ADMIN',
     plan: 'PROFESSIONAL',
@@ -38,7 +36,7 @@ if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 
 app.use('/temp', express.static(TEMP_DIR));
 
-// --- ENDPOINTS DE USUÁRIOS (FIX PARA O ADMIN) ---
+// --- ENDPOINTS DE USUÁRIOS ---
 
 app.get('/api/users', (req, res) => {
     res.json(usersDB);
@@ -52,7 +50,7 @@ app.post('/api/register', (req, res) => {
     const newUser = {
         id: `user-${Date.now()}`,
         name, email, password,
-        credits: 70, // Créditos iniciais
+        credits: 70,
         role: email === 'wesleybizerra@hotmail.com' ? 'ADMIN' : 'USER',
         plan: 'FREE',
         createdAt: new Date().toISOString()
@@ -65,7 +63,6 @@ app.post('/api/login', (req, res) => {
     const { email, password } = req.body;
     const user = usersDB.find(u => u.email === email);
     if (!user) return res.status(404).json({ error: "Usuário não encontrado." });
-    // Se enviou senha, valida. Se for só refresh, ignora validação simples.
     if (password && user.password !== password) return res.status(401).json({ error: "Senha incorreta." });
     res.json(user);
 });
@@ -112,7 +109,7 @@ app.post('/api/create-preference', async (req, res) => {
     }
 });
 
-// --- MOTOR DE VÍDEO V9.5 (100% LIMPO) ---
+// --- MOTOR DE VÍDEO V9.6 (ESTÁVEL) ---
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, TEMP_DIR),
@@ -138,10 +135,9 @@ app.post('/api/generate-real-clips', upload.single('video'), async (req, res) =>
             if (startSec < 0) startSec = 0;
 
             const timestamp = new Date(startSec * 1000).toISOString().substr(11, 8);
-            const clipName = `clean_v95_${sessionID}_${i}.mp4`;
+            const clipName = `bizerra_v96_${sessionID}_${i}.mp4`;
             const outputPath = path.join(TEMP_DIR, clipName);
             
-            // FILTRO 100% LIMPO: APENAS 9:16
             const complexFilter = `[0:v]scale=w=540:h=960:force_original_aspect_ratio=increase,crop=540:960,setsar=1[v]`;
             const cutCmd = `ffmpeg -ss ${timestamp} -i "${inputPath}" -t ${finalDuration} -filter_complex "${complexFilter}" -map "[v]" -map 0:a? -c:v libx264 -preset ultrafast -crf 26 -c:a aac -y "${outputPath}"`;
             
@@ -149,7 +145,7 @@ app.post('/api/generate-real-clips', upload.single('video'), async (req, res) =>
                 execSync(cutCmd, { timeout: 600000 }); 
                 clips.push({
                     id: `clip-${sessionID}-${i}`,
-                    title: `Corte Limpo ${i+1}`,
+                    title: `Corte Viral ${i+1}`,
                     videoUrl: `/temp/${clipName}`,
                     thumbnail: `https://picsum.photos/seed/${sessionID + i}/400/700`,
                     duration: finalDuration.toString()
@@ -158,14 +154,23 @@ app.post('/api/generate-real-clips', upload.single('video'), async (req, res) =>
         }
 
         res.json({ status: "success", clips });
-        setTimeout(() => { if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath); }, 900000);
+        
+        // CLIPE FICA DISPONÍVEL POR 20 HORAS (72.000.000 ms)
+        setTimeout(() => { 
+          clips.forEach(c => {
+            const p = path.join(TEMP_DIR, path.basename(c.videoUrl));
+            if (fs.existsSync(p)) fs.unlinkSync(p);
+          });
+        }, 72000000);
+
+        if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
     } catch (err) {
         if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
-        res.status(500).json({ error: "Falha no Motor V9.5" });
+        res.status(500).json({ error: "Falha no Motor V9.6" });
     }
 });
 
-app.get('/health', (req, res) => res.json({ status: "online", version: "9.5-Final" }));
+app.get('/health', (req, res) => res.json({ status: "online", version: "9.6-Stable" }));
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, '0.0.0.0', () => console.log(`Motor Bizerra V9.5 - Centralizado e Ativado`));
+app.listen(PORT, '0.0.0.0', () => console.log(`Motor Bizerra V9.6 - Estável e Ativado`));
