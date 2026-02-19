@@ -3,10 +3,8 @@ import { User, Clip } from '../types.ts';
 
 /**
  * ATENÇÃO WESLEY: 
- * 1. Vá no painel do Railway em 'Settings' -> 'Public Networking'.
- * 2. Clique em 'Generate Domain' (se ainda não tiver um).
- * 3. Copie a URL gerada (ex: https://bizerra-production.up.railway.app)
- * 4. Cole ela abaixo na variável RAILWAY_URL.
+ * Verifique no painel do Railway em 'Settings' -> 'Public Networking'
+ * se a URL abaixo é exatamente a que o Railway te deu.
  */
 const RAILWAY_URL = 'https://bizerraclipes-production.up.railway.app';
 
