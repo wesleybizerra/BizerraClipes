@@ -1,3 +1,4 @@
+
 import express from 'express';
 import cors from 'cors';
 import { exec } from 'child_process';
@@ -16,44 +17,17 @@ const execPromise = util.promisify(exec);
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// 1. CONFIGURAÇÃO DE CORS - CRUCIAL PARA FALAR COM O NETLIFY
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
-}));
-
+app.use(cors());
 app.use(express.json());
 
-// 2. HEALTH CHECK IMEDIATO (O Railway precisa disso para não matar o app)
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: "ok", message: "Motor Bizerra V10 Ativo" });
-});
+app.get('/health', (req, res) => res.json({ status: "ok" }));
+app.get('/', (req, res) => res.send("Motor Bizerra V10 ONLINE"));
 
-app.get('/', (req, res) => {
-  res.status(200).send("<h1>Motor Bizerra V10 está ONLINE!</h1>");
-});
+const TEMP_DIR = path.join(__dirname, 'temp');
+if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
+app.use('/temp', express.static(TEMP_DIR));
 
-// 3. INICIALIZAÇÃO ASSÍNCRONA DAS IAs (Para não travar o boot)
-let ai = null;
-const initAI = () => {
-  if (process.env.API_KEY) {
-    try {
-      ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      console.log("✅ [Gemini] Conectado.");
-    } catch (e) {
-      console.error("❌ [Gemini] Erro:", e.message);
-    }
-  }
-};
-initAI();
-
-// Config Mercado Pago
-const mpClient = process.env.MP_ACCESS_TOKEN
-  ? new MercadoPagoConfig({ accessToken: process.env.MP_ACCESS_TOKEN })
-  : null;
-
-// Banco de dados em memória (limpa a cada deploy)
+// DB em memória
 let usersDB = [{
   id: 'admin-1',
   name: 'Admin Bizerra',
@@ -65,11 +39,26 @@ let usersDB = [{
 }];
 let jobsDB = {};
 
-const TEMP_DIR = path.join(__dirname, 'temp');
-if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
-app.use('/temp', express.static(TEMP_DIR));
+// Mercado Pago
+const mpClient = process.env.MP_ACCESS_TOKEN
+  ? new MercadoPagoConfig({ accessToken: process.env.MP_ACCESS_TOKEN })
+  : null;
 
-// Rota de Login/Registro
+app.post('/api/create-preference', async (req, res) => {
+  if (!mpClient) return res.status(500).json({ error: "MP não configurado" });
+  try {
+    const { planName, price, userId } = req.body;
+    const preference = await new Preference(mpClient).create({
+      body: {
+        items: [{ title: planName, quantity: 1, unit_price: Number(price), currency_id: 'BRL' }],
+        back_urls: { success: `https://bizerraclipes.netlify.app/#/dashboard?payment=success&user=${userId}` },
+        auto_return: 'approved',
+      }
+    });
+    res.json({ init_point: preference.init_point });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.post('/api/login', (req, res) => {
   const { email, password } = req.body;
   const user = usersDB.find(u => u.email === email);
@@ -97,34 +86,20 @@ app.put('/api/users/:id/credits', (req, res) => {
   res.status(404).json({ error: "Usuário não encontrado" });
 });
 
-// Geração de Clipes
-const upload = multer({ dest: TEMP_DIR, limits: { fileSize: 500 * 1024 * 1024 } });
-
+const upload = multer({ dest: TEMP_DIR });
 app.post('/api/generate-real-clips', upload.single('video'), async (req, res) => {
   const jobID = `job_${Date.now()}`;
-  jobsDB[jobID] = { status: 'processing', progress: 0, clips: [] };
+  jobsDB[jobID] = { status: 'processing', progress: 10, currentClip: 1, totalClips: 1, clips: [] };
   res.json({ jobId: jobID });
 
-  // Processamento pesado em background
   (async () => {
     try {
-      const inputPath = req.file.path;
       const outName = `clip_${jobID}.mp4`;
       const outPath = path.join(TEMP_DIR, outName);
-
-      // Comando FFmpeg básico para teste de viralização
-      const cmd = `ffmpeg -i "${inputPath}" -ss 0 -t 30 -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" -c:v libx264 -preset ultrafast -y "${outPath}"`;
-      await execPromise(cmd);
-
+      await execPromise(`ffmpeg -i "${req.file.path}" -t 15 -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" -c:v libx264 -preset ultrafast -y "${outPath}"`);
       jobsDB[jobID].status = 'completed';
       jobsDB[jobID].progress = 100;
-      jobsDB[jobID].clips = [{
-        id: jobID,
-        title: "Corte Viral Gerado",
-        videoUrl: `/temp/${outName}`,
-        thumbnail: "https://picsum.photos/seed/bizerra/400/700",
-        duration: "30"
-      }];
+      jobsDB[jobID].clips = [{ id: jobID, title: "Corte Viral", videoUrl: `/temp/${outName}`, thumbnail: "https://picsum.photos/200/300", duration: "15" }];
     } catch (e) {
       jobsDB[jobID].status = 'error';
       jobsDB[jobID].error = e.message;
@@ -134,14 +109,6 @@ app.post('/api/generate-real-clips', upload.single('video'), async (req, res) =>
 
 app.get('/api/jobs/:id', (req, res) => res.json(jobsDB[req.params.id] || { status: 'not_found' }));
 
-// INICIAR ESCUTA - Railway exige 0.0.0.0
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`
-    -------------------------------------------
-    ⚡ MOTOR BIZERRA V10 INICIADO
-    🌍 Host: 0.0.0.0
-    🔌 Porta: ${PORT}
-    🚀 URL Railway: https://bizerraclipes-production.up.railway.app
-    -------------------------------------------
-    `);
+  console.log(`🚀 Motor V10 rodando na porta ${PORT}`);
 });

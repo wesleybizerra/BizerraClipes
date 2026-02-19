@@ -1,15 +1,9 @@
+
 import { User, Clip } from '../types.ts';
 
-/**
- * ATENÇÃO WESLEY: 
- * Se o link no Railway mudar, atualize a URL abaixo.
- */
 const RAILWAY_URL = 'https://bizerraclipes-production.up.railway.app';
-
 const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 const BACKEND_URL = isLocal ? 'http://localhost:8080' : RAILWAY_URL;
-
-console.log(`[Bizerra System] Conectando ao backend em: ${BACKEND_URL}`);
 
 export const api = {
   checkHealth: async (): Promise<boolean> => {
@@ -21,11 +15,27 @@ export const api = {
     }
   },
 
-  getAllUsers: async (): Promise<User[]> => {
+  login: async (email: string, password?: string): Promise<User> => {
     try {
-      const response = await fetch(`${BACKEND_URL}/api/users`);
+      console.log(`[API] Tentando login em: ${BACKEND_URL}/api/login`);
+      const response = await fetch(`${BACKEND_URL}/api/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Credenciais inválidas.");
+      }
       return await response.json();
-    } catch (e) { return []; }
+    } catch (e: any) {
+      console.error("[ERRO CRÍTICO NO MOTOR]:", e);
+      throw new Error(`ERRO DE CONEXÃO: O navegador não conseguiu falar com o servidor no Railway. 
+      \n1. Verifique se o link ${BACKEND_URL} abre no seu navegador.
+      \n2. Se abrir e mostrar 'ONLINE', o problema é cache ou CORS.
+      \n3. Detalhe técnico: ${e.message}`);
+    }
   },
 
   register: async (email: string, name: string, password: string): Promise<User> => {
@@ -41,23 +51,11 @@ export const api = {
     return await response.json();
   },
 
-  login: async (email: string, password?: string): Promise<User> => {
+  getAllUsers: async (): Promise<User[]> => {
     try {
-      const response = await fetch(`${BACKEND_URL}/api/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || "Credenciais inválidas.");
-      }
+      const response = await fetch(`${BACKEND_URL}/api/users`);
       return await response.json();
-    } catch (e) {
-      throw new Error(`ERRO DE CONEXÃO: O motor no Railway não respondeu. 
-      Isso acontece se o motor estiver em "Build" ou desligado. 
-      Tente abrir ${BACKEND_URL} no navegador para testar.`);
-    }
+    } catch (e) { return []; }
   },
 
   updateUserCredits: async (userId: string, amount: number): Promise<User> => {
