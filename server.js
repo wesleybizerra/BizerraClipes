@@ -15,18 +15,35 @@ const execPromise = util.promisify(exec);
 
 const app = express();
 
-// Inicialização segura do Gemini
+// Configuração de CORS para aceitar requisições do Netlify
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+app.use(express.json());
+
+// Rota raiz para teste rápido
+app.get('/', (req, res) => {
+  res.send(`
+        <div style="font-family: sans-serif; text-align: center; padding: 50px; background: #0f172a; color: white;">
+            <h1 style="color: #22c55e;">⚡ MOTOR BIZERRA V10 ONLINE</h1>
+            <p>Se você está vendo isso, o servidor está rodando perfeitamente!</p>
+            <p style="color: #64748b;">Aguardando comandos do site...</p>
+            <div style="margin-top: 20px; padding: 10px; background: #1e293b; border-radius: 8px; display: inline-block;">
+                Porta Ativa: ${process.env.PORT || 8080}
+            </div>
+        </div>
+    `);
+});
+
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-// Inicialização segura do Mercado Pago
 const mpClient = process.env.MP_ACCESS_TOKEN
   ? new MercadoPagoConfig({ accessToken: process.env.MP_ACCESS_TOKEN })
   : null;
 
-app.use(cors());
-app.use(express.json());
-
-// Banco de dados em memória
 let usersDB = [
   {
     id: 'admin-1',
@@ -47,7 +64,6 @@ if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 
 app.use('/temp', express.static(TEMP_DIR));
 
-// Endpoint de Health Check para o Railway
 app.get('/health', (req, res) => res.json({
   status: "online",
   motor: "Bizerra V10",
@@ -144,6 +160,7 @@ app.post('/api/generate-real-clips', upload.single('video'), async (req, res) =>
 
   (async () => {
     try {
+      console.log(`[Job ${jobID}] Iniciando processamento do arquivo: ${videoFile.filename}`);
       const { stdout: dur } = await execPromise(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${inputPath}"`);
       const totalDuration = parseFloat(dur.trim());
 
@@ -177,6 +194,7 @@ app.post('/api/generate-real-clips', upload.single('video'), async (req, res) =>
       jobsDB[jobID].progress = 100;
       if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
     } catch (err) {
+      console.error(`[Job ${jobID}] ERRO:`, err);
       jobsDB[jobID].status = 'error';
       jobsDB[jobID].error = err.message;
       if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
@@ -190,7 +208,8 @@ app.get('/api/jobs/:id', (req, res) => {
   res.json(job);
 });
 
-const PORT = process.env.PORT || 10000;
+// IMPORTANTE: Railway injeta a porta em process.env.PORT, mas fixamos 8080 para bater com o print.
+const PORT = process.env.PORT || 8080;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 BIZERRA MOTOR V10 RODANDO NA PORTA ${PORT}`);
 });

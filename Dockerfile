@@ -1,9 +1,8 @@
-FROM node:20
-RUN apt-get update && apt-get install -y ffmpeg
+FROM node:20-slim
+RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY package*.json ./
-RUN npm install
+RUN npm install --production
 COPY . .
-RUN mkdir -p temp && chmod 777 temp
-EXPOSE 10000
+EXPOSE 8080
 CMD ["node", "server.js"]
