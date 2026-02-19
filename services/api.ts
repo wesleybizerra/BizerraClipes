@@ -1,39 +1,27 @@
 import { User, Clip } from '../types.ts';
 
-const RAILWAY_URL = 'https://bizerraclipes-production.up.railway.app';
+// Quando unificado, o backend é a própria URL do site
 const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-const BACKEND_URL = isLocal ? 'http://localhost:8080' : RAILWAY_URL;
+const BACKEND_URL = isLocal ? 'http://localhost:8080' : window.location.origin;
 
 export const api = {
   checkHealth: async (): Promise<boolean> => {
     try {
       const response = await fetch(`${BACKEND_URL}/health`);
       return response.ok;
-    } catch (e) {
-      return false;
-    }
+    } catch (e) { return false; }
   },
 
   login: async (email: string, password?: string): Promise<User> => {
-    let response;
-    try {
-      console.log(`[API] Tentando acesso em: ${BACKEND_URL}/api/login`);
-      response = await fetch(`${BACKEND_URL}/api/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
-    } catch (networkError: any) {
-      console.error("[ERRO DE REDE]:", networkError);
-      throw new Error(`O servidor no Railway não respondeu. Certifique-se de que ${BACKEND_URL} está acessível.`);
-    }
-
+    const response = await fetch(`${BACKEND_URL}/api/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
     if (!response.ok) {
-      const err = await response.json();
-      // Aqui mostramos a mensagem REAL do servidor (ex: "Senha incorreta")
+      const err = await response.json().catch(() => ({ error: "Erro desconhecido no servidor." }));
       throw new Error(err.error || "Erro ao realizar login.");
     }
-
     return await response.json();
   },
 
@@ -44,8 +32,8 @@ export const api = {
       body: JSON.stringify({ email, name, password })
     });
     if (!response.ok) {
-      const err = await response.json();
-      throw new Error(err.error || "Erro no cadastro.");
+      const err = await response.json().catch(() => ({ error: "Erro no cadastro." }));
+      throw new Error(err.error);
     }
     return await response.json();
   },
@@ -73,6 +61,7 @@ export const api = {
       body: JSON.stringify({ userId, planId, planName, price })
     });
     const data = await response.json();
+    if (data.error) throw new Error(data.error);
     return data.init_point;
   },
 
@@ -104,7 +93,11 @@ export const api = {
       body: formData
     });
 
-    if (!startResponse.ok) throw new Error("Falha ao iniciar motor.");
+    if (!startResponse.ok) {
+      const err = await startResponse.json().catch(() => ({ error: "O Motor não respondeu adequadamente." }));
+      throw new Error(err.error);
+    }
+
     const { jobId } = await startResponse.json();
 
     return new Promise((resolve, reject) => {
@@ -121,12 +114,12 @@ export const api = {
             await api.updateUserCredits(userId, -10);
             resolve(realClips);
           } else if (job.status === 'error') {
-            reject(new Error(job.error));
+            reject(new Error("O Motor falhou ao processar o vídeo. Verifique se o arquivo não está corrompido."));
           } else {
             setTimeout(check, 3000);
           }
         } catch (e) {
-          reject(new Error("Perda de sinal com o motor."));
+          reject(new Error("Conexão perdida com o motor. Verifique sua internet."));
         }
       };
       check();
