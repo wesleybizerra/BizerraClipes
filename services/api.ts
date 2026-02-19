@@ -1,6 +1,5 @@
 import { User, Clip } from '../types.ts';
 
-// Quando unificado, o backend é a própria URL do site
 const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 const BACKEND_URL = isLocal ? 'http://localhost:8080' : window.location.origin;
 
@@ -83,10 +82,12 @@ export const api = {
     return userId ? allClips.filter((c: any) => c.userId === userId) : allClips;
   },
 
-  generateClips: async (userId: string, videoFile: File, onProgress?: (data: any) => void): Promise<Clip[]> => {
+  generateClips: async (userId: string, videoFile: File, startTime: number, endTime: number, onProgress?: (data: any) => void): Promise<Clip[]> => {
     const formData = new FormData();
     formData.append('video', videoFile);
     formData.append('userId', userId);
+    formData.append('startTime', startTime.toString());
+    formData.append('endTime', endTime.toString());
 
     const startResponse = await fetch(`${BACKEND_URL}/api/generate-real-clips`, {
       method: 'POST',
@@ -114,12 +115,12 @@ export const api = {
             await api.updateUserCredits(userId, -10);
             resolve(realClips);
           } else if (job.status === 'error') {
-            reject(new Error("O Motor falhou ao processar o vídeo. Verifique se o arquivo não está corrompido."));
+            reject(new Error("O Motor falhou ao processar o vídeo."));
           } else {
             setTimeout(check, 3000);
           }
         } catch (e) {
-          reject(new Error("Conexão perdida com o motor. Verifique sua internet."));
+          reject(new Error("Conexão perdida com o motor."));
         }
       };
       check();

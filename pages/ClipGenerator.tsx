@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
@@ -12,6 +11,11 @@ const ClipGenerator: React.FC = () => {
   const [clips, setClips] = useState<Clip[]>([]);
   const [jobProgress, setJobProgress] = useState({ percent: 0, current: 0, total: 10, status: '' });
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
+
+  // Novos estados para o Range
+  const [rangeStart, setRangeStart] = useState<number>(0);
+  const [rangeEnd, setRangeEnd] = useState<number>(300); // 5 minutos por padrão
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
@@ -26,12 +30,13 @@ const ClipGenerator: React.FC = () => {
   const handleGenerate = async () => {
     if (!selectedFile) return alert("Selecione um vídeo.");
     if (user.credits < 10) return navigate('/planos');
+    if (rangeEnd <= rangeStart) return alert("O tempo de fim deve ser maior que o de início.");
 
     setIsProcessing(true);
     setJobProgress({ percent: 0, current: 0, total: 10, status: 'IA Invocando Neurônios...' });
 
     try {
-      const generated = await api.generateClips(user.id, selectedFile, (job) => {
+      const generated = await api.generateClips(user.id, selectedFile, rangeStart, rangeEnd, (job) => {
         let statusMsg = '';
         switch (job.status) {
           case 'analyzing': statusMsg = 'Gemini analisando ganchos virais...'; break;
@@ -52,6 +57,12 @@ const ClipGenerator: React.FC = () => {
       alert("Erro no Motor: " + err.message);
       setIsProcessing(false);
     }
+  };
+
+  const formatSeconds = (sec: number) => {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
   return (
@@ -90,8 +101,8 @@ const ClipGenerator: React.FC = () => {
           <header className="mb-12">
             <h1 className="text-4xl font-black tracking-tight mb-2">Novo Projeto Viral</h1>
             <div className="flex items-center gap-3">
-              <span className="bg-purple-500/10 text-purple-400 text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-widest border border-purple-500/20">Gemini AI Detection</span>
-              <span className="bg-green-500/10 text-green-400 text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-widest border border-green-500/20">V10 Motor Active</span>
+              <span className="bg-purple-500/10 text-purple-400 text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-widest border border-purple-500/20">Range Mode Active</span>
+              <span className="bg-green-500/10 text-green-400 text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-widest border border-green-500/20">V10 Engine</span>
             </div>
           </header>
 
@@ -107,13 +118,44 @@ const ClipGenerator: React.FC = () => {
                 <p className="text-xs text-slate-600 mt-2">MP4, MOV ou AVI (Máx 500MB)</p>
               </div>
 
+              {selectedFile && (
+                <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-slate-950 rounded-3xl border border-slate-800 animate-in zoom-in duration-300">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Onde Começar? ({formatSeconds(rangeStart)})</label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="3600"
+                      value={rangeStart}
+                      onChange={(e) => setRangeStart(parseInt(e.target.value))}
+                      className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-green-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Até Onde Analisar? ({formatSeconds(rangeEnd)})</label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="3600"
+                      value={rangeEnd}
+                      onChange={(e) => setRangeEnd(parseInt(e.target.value))}
+                      className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-green-500"
+                    />
+                  </div>
+                  <div className="md:col-span-2 text-center text-xs text-slate-500 font-medium">
+                    <i className="fa-solid fa-circle-info mr-2"></i>
+                    O sistema distribuirá 10 cortes de 15 segundos entre {formatSeconds(rangeStart)} e {formatSeconds(rangeEnd)}.
+                  </div>
+                </div>
+              )}
+
               <button
                 onClick={handleGenerate}
                 disabled={!selectedFile}
                 className="w-full mt-8 bg-green-500 hover:bg-green-400 disabled:opacity-50 disabled:hover:bg-green-500 text-slate-950 font-black text-xl py-6 rounded-3xl transition-all shadow-2xl flex items-center justify-center gap-3 active:scale-[0.98]"
               >
                 <i className="fa-solid fa-wand-magic-sparkles"></i>
-                GERAR 10 CLIPES INTELIGENTES
+                GERAR MEUS 10 CLIPES
               </button>
               <p className="text-center mt-4 text-[10px] text-slate-500 font-bold uppercase tracking-widest">Custo: 10 Créditos • Tempo médio: 2 min</p>
             </div>
@@ -130,7 +172,7 @@ const ClipGenerator: React.FC = () => {
                 </div>
               </div>
               <h2 className="text-2xl font-black mb-2 tracking-tighter uppercase">{jobProgress.status}</h2>
-              <p className="text-slate-500 max-w-xs mx-auto text-sm">Nossa IA está trabalhando pesado para encontrar os melhores momentos. Não feche esta página.</p>
+              <p className="text-slate-500 max-w-xs mx-auto text-sm">Aguarde, estamos processando o intervalo de {formatSeconds(rangeStart)} até {formatSeconds(rangeEnd)}.</p>
             </div>
           )}
 

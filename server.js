@@ -52,7 +52,7 @@ const TEMP_DIR = path.join(__dirname, 'temp');
 if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 app.use('/temp', express.static(TEMP_DIR));
 
-app.get('/health', (req, res) => res.json({ status: "ok", engine: "V10-Bizerra-MultiClip" }));
+app.get('/health', (req, res) => res.json({ status: "ok", engine: "V10-Bizerra-RangeMode" }));
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, TEMP_DIR),
@@ -66,7 +66,11 @@ const upload = multer({ storage: storage, limits: { fileSize: 500 * 1024 * 1024 
 app.post('/api/generate-real-clips', upload.single('video'), async (req, res) => {
   const jobID = `job_${Date.now()}`;
   const userId = req.body.userId;
-  const TOTAL_CLIPS_TARGET = 10; // Gerar o máximo possível
+  const TOTAL_CLIPS_TARGET = 10;
+
+  // Novos parâmetros de intervalo (em segundos)
+  const customStart = parseInt(req.body.startTime) || 0;
+  const customEnd = parseInt(req.body.endTime) || 300; // default 5 min se não enviado
 
   if (!req.file) return res.status(400).json({ error: "Vídeo não recebido." });
 
@@ -77,39 +81,35 @@ app.post('/api/generate-real-clips', upload.single('video'), async (req, res) =>
     );
     res.json({ jobId: jobID });
 
-    // Processamento Assíncrono em Background
     (async () => {
       const inputPath = req.file.path;
       const generatedClips = [];
 
       try {
-        console.log(`🎬 Iniciando geração de Pack para Job ${jobID}...`);
+        const rangeDuration = customEnd - customStart;
+        const intervalStep = rangeDuration > 0 ? rangeDuration / TOTAL_CLIPS_TARGET : 20;
+
+        console.log(`🎬 Geração Range: ${customStart}s até ${customEnd}s. Passo: ${intervalStep}s`);
 
         for (let i = 0; i < TOTAL_CLIPS_TARGET; i++) {
           const clipID = `${jobID}_${i}`;
           const outName = `clip_${clipID}.mp4`;
           const outPath = path.join(TEMP_DIR, outName);
 
-          // Cada clipe pega um segmento de 15 segundos começando de pontos diferentes (0s, 20s, 40s...)
-          const startTime = i * 20;
+          const startTime = customStart + (i * intervalStep);
 
-          console.log(`⏳ Renderizando Clipe ${i + 1}/${TOTAL_CLIPS_TARGET} (Start: ${startTime}s)...`);
-
-          const ffmpegCmd = `ffmpeg -ss ${startTime} -t 15 -i "${inputPath}" -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" -c:v libx264 -preset ultrafast -crf 26 -c:a aac -b:a 96k -y "${outPath}"`;
+          const ffmpegCmd = `ffmpeg -ss ${startTime} -t 15 -i "${inputPath}" -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" -c:v libx264 -preset ultrafast -crf 28 -c:a aac -b:a 96k -y "${outPath}"`;
 
           await execPromise(ffmpegCmd, { maxBuffer: 1024 * 1024 * 50 });
 
-          const clipData = {
+          generatedClips.push({
             id: clipID,
-            title: `Corte Viral #${i + 1}`,
+            title: `Corte ${i + 1} [Início: ${Math.floor(startTime)}s]`,
             videoUrl: `/temp/${outName}`,
             thumbnail: "https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400",
             duration: "15"
-          };
+          });
 
-          generatedClips.push(clipData);
-
-          // Atualiza progresso parcial no banco
           const progressPercent = Math.round(((i + 1) / TOTAL_CLIPS_TARGET) * 100);
           await pool.query(
             'UPDATE jobs SET progress = $1, current_clip = $2, clips = $3 WHERE id = $4',
@@ -118,10 +118,8 @@ app.post('/api/generate-real-clips', upload.single('video'), async (req, res) =>
         }
 
         await pool.query('UPDATE jobs SET status = $1, progress = 100 WHERE id = $2', ['completed', jobID]);
-        console.log(`✅ Pack ${jobID} finalizado com ${generatedClips.length} clipes.`);
-
       } catch (e) {
-        console.error("❌ Erro Crítico no Motor:", e.stderr || e.message);
+        console.error("❌ Erro no Motor:", e.message);
         await pool.query('UPDATE jobs SET status = $1 WHERE id = $2', ['error', jobID]);
       } finally {
         if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
@@ -173,4 +171,4 @@ app.get('/api/jobs/:id', async (req, res) => {
 
 app.get('*', (req, res) => res.sendFile(path.join(DIST_PATH, 'index.html')));
 
-app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Motor Multi-Clip Online na porta ${PORT}`));
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Motor Range Mode Online na porta ${PORT}`));
