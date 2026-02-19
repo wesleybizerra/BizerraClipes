@@ -37,8 +37,8 @@ const initDB = async () => {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    console.log("✅ Banco de Dados Pronto!");
-  } catch (err) { console.error("❌ Erro DB:", err.message); }
+    console.log("✅ Banco de Dados e Tabelas Prontas!");
+  } catch (err) { console.error("❌ Erro DB Inicialização:", err.message); }
 };
 initDB();
 
@@ -52,7 +52,7 @@ const TEMP_DIR = path.join(__dirname, 'temp');
 if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 app.use('/temp', express.static(TEMP_DIR));
 
-app.get('/health', (req, res) => res.json({ status: "ok", engine: "V10-Bizerra-RangeMode" }));
+app.get('/health', (req, res) => res.json({ status: "ok", engine: "V10-Bizerra-UltraRobust" }));
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, TEMP_DIR),
@@ -61,53 +61,78 @@ const storage = multer.diskStorage({
     cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
   }
 });
-const upload = multer({ storage: storage, limits: { fileSize: 500 * 1024 * 1024 } });
+const upload = multer({ storage: storage, limits: { fileSize: 800 * 1024 * 1024 } });
+
+// Função para pegar duração real do vídeo
+async function getVideoDuration(filePath) {
+  try {
+    const { stdout } = await execPromise(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${filePath}"`);
+    return parseFloat(stdout);
+  } catch (e) {
+    console.error("Erro ffprobe:", e);
+    return 0;
+  }
+}
 
 app.post('/api/generate-real-clips', upload.single('video'), async (req, res) => {
   const jobID = `job_${Date.now()}`;
   const userId = req.body.userId;
   const TOTAL_CLIPS_TARGET = 10;
 
-  // Novos parâmetros de intervalo (em segundos)
-  const customStart = parseInt(req.body.startTime) || 0;
-  const customEnd = parseInt(req.body.endTime) || 300; // default 5 min se não enviado
-
-  if (!req.file) return res.status(400).json({ error: "Vídeo não recebido." });
+  if (!req.file) return res.status(400).json({ error: "Nenhum arquivo enviado." });
 
   try {
     await pool.query(
       'INSERT INTO jobs (id, user_id, status, progress, current_clip, total_clips, clips) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-      [jobID, userId, 'processing', 0, 0, TOTAL_CLIPS_TARGET, JSON.stringify([])]
+      [jobID, userId, 'analyzing', 0, 0, TOTAL_CLIPS_TARGET, JSON.stringify([])]
     );
     res.json({ jobId: jobID });
 
+    // Processamento em Background
     (async () => {
       const inputPath = req.file.path;
       const generatedClips = [];
 
       try {
-        const rangeDuration = customEnd - customStart;
-        const intervalStep = rangeDuration > 0 ? rangeDuration / TOTAL_CLIPS_TARGET : 20;
+        const actualDuration = await getVideoDuration(inputPath);
+        console.log(`🎬 Vídeo Recebido. Duração Real: ${actualDuration}s`);
 
-        console.log(`🎬 Geração Range: ${customStart}s até ${customEnd}s. Passo: ${intervalStep}s`);
+        if (actualDuration <= 0) throw new Error("Não foi possível ler a duração do vídeo.");
+
+        let customStart = Math.max(0, parseInt(req.body.startTime) || 0);
+        let customEnd = Math.min(actualDuration, parseInt(req.body.endTime) || actualDuration);
+
+        // Se o usuário selecionou um range menor que o necessário para 10 clips de 15s
+        // o sistema ajusta o tempo de cada clipe para caber.
+        const rangeDuration = customEnd - customStart;
+        const clipDuration = Math.min(15, rangeDuration / TOTAL_CLIPS_TARGET);
+        const intervalStep = rangeDuration / TOTAL_CLIPS_TARGET;
+
+        console.log(`⚙️ Config: Start=${customStart}, End=${customEnd}, Step=${intervalStep}s, ClipLen=${clipDuration}s`);
+
+        await pool.query('UPDATE jobs SET status = $1 WHERE id = $2', ['processing', jobID]);
 
         for (let i = 0; i < TOTAL_CLIPS_TARGET; i++) {
           const clipID = `${jobID}_${i}`;
           const outName = `clip_${clipID}.mp4`;
           const outPath = path.join(TEMP_DIR, outName);
 
-          const startTime = customStart + (i * intervalStep);
+          // Garante que o start não ultrapasse o fim do vídeo
+          const startTime = Math.min(customStart + (i * intervalStep), actualDuration - clipDuration);
 
-          const ffmpegCmd = `ffmpeg -ss ${startTime} -t 15 -i "${inputPath}" -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" -c:v libx264 -preset ultrafast -crf 28 -c:a aac -b:a 96k -y "${outPath}"`;
+          console.log(`⏳ Gerando Clipe ${i + 1}/10 em ${startTime.toFixed(2)}s...`);
 
-          await execPromise(ffmpegCmd, { maxBuffer: 1024 * 1024 * 50 });
+          // Comando otimizado para Railway (mais rápido e gasta menos CPU)
+          const ffmpegCmd = `ffmpeg -ss ${startTime} -t ${clipDuration} -i "${inputPath}" -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" -c:v libx264 -preset superfast -crf 28 -c:a aac -b:a 64k -y "${outPath}"`;
+
+          await execPromise(ffmpegCmd, { timeout: 60000 }); // 60s timeout por clipe
 
           generatedClips.push({
             id: clipID,
-            title: `Corte ${i + 1} [Início: ${Math.floor(startTime)}s]`,
+            title: `Viral Clip #${i + 1} (${Math.floor(startTime)}s)`,
             videoUrl: `/temp/${outName}`,
-            thumbnail: "https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400",
-            duration: "15"
+            thumbnail: "https://images.unsplash.com/photo-1485846234645-a62644f84728?w=400",
+            duration: Math.floor(clipDuration).toString()
           });
 
           const progressPercent = Math.round(((i + 1) / TOTAL_CLIPS_TARGET) * 100);
@@ -118,16 +143,20 @@ app.post('/api/generate-real-clips', upload.single('video'), async (req, res) =>
         }
 
         await pool.query('UPDATE jobs SET status = $1, progress = 100 WHERE id = $2', ['completed', jobID]);
+        console.log(`✅ Pack Finalizado com Sucesso para o Job ${jobID}`);
+
       } catch (e) {
-        console.error("❌ Erro no Motor:", e.message);
+        console.error(`❌ Erro Processamento Job ${jobID}:`, e.message);
         await pool.query('UPDATE jobs SET status = $1 WHERE id = $2', ['error', jobID]);
       } finally {
-        if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
+        if (fs.existsSync(inputPath)) {
+          try { fs.unlinkSync(inputPath); } catch (err) { console.error("Erro ao deletar original:", err); }
+        }
       }
     })();
   } catch (e) {
+    console.error("Erro API principal:", e.message);
     res.status(500).json({ error: e.message });
-    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
   }
 });
 
@@ -136,8 +165,8 @@ app.post('/api/login', async (req, res) => {
     const { email, password } = req.body;
     const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
     const user = result.rows[0];
-    if (!user) return res.status(404).json({ error: "Usuário inexistente." });
-    if (password && user.password !== password) return res.status(401).json({ error: "Senha inválida." });
+    if (!user) return res.status(404).json({ error: "Usuário não encontrado." });
+    if (password && user.password !== password) return res.status(401).json({ error: "Senha incorreta." });
     res.json(user);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -147,11 +176,14 @@ app.post('/api/register', async (req, res) => {
     const { name, email, password } = req.body;
     const id = `user-${Date.now()}`;
     const result = await pool.query(
-      'INSERT INTO users (id, name, email, password, credits, role, plan) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email RETURNING *',
+      'INSERT INTO users (id, name, email, password, credits, role, plan) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
       [id, name, email, password, 70, 'USER', 'FREE']
     );
     res.json(result.rows[0]);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    if (e.code === '23505') return res.status(400).json({ error: "Email já cadastrado." });
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.get('/api/users', async (req, res) => {
@@ -165,10 +197,12 @@ app.put('/api/users/:id/credits', async (req, res) => {
 });
 
 app.get('/api/jobs/:id', async (req, res) => {
-  const r = await pool.query('SELECT * FROM jobs WHERE id = $1', [req.params.id]);
-  res.json(r.rows[0] || { status: 'not_found' });
+  try {
+    const r = await pool.query('SELECT * FROM jobs WHERE id = $1', [req.params.id]);
+    res.json(r.rows[0] || { status: 'not_found' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('*', (req, res) => res.sendFile(path.join(DIST_PATH, 'index.html')));
 
-app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Motor Range Mode Online na porta ${PORT}`));
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Motor V10-Ultra Robust rodando na porta ${PORT}`));
