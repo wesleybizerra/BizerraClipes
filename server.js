@@ -1,75 +1,165 @@
+
 const express = require('express');
 const cors = require('cors');
 const { exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const multer = require('multer');
+const { MercadoPagoConfig, Preference } = require('mercadopago');
+const util = require('util');
+const execPromise = util.promisify(exec);
 
 const app = express();
 
-// Configuração de CORS: Permite que seu frontend fale com este backend
+// CONFIGURAÇÃO MERCADO PAGO
+const mpClient = process.env.MP_ACCESS_TOKEN
+  ? new MercadoPagoConfig({ accessToken: process.env.MP_ACCESS_TOKEN })
+  : null;
+
+// CORS LIBERADO PARA PRODUÇÃO
 app.use(cors());
 app.use(express.json());
 
-// Configuração da pasta temporária
+// BANCO DE DADOS EM MEMÓRIA (RESETADO A CADA DEPLOY)
+let usersDB = [
+  {
+    id: 'admin-1',
+    name: 'Admin Bizerra',
+    email: 'wesleybizerra@hotmail.com',
+    password: '123',
+    credits: 9999,
+    role: 'ADMIN',
+    plan: 'PROFESSIONAL',
+    createdAt: new Date().toISOString()
+  }
+];
+
+let jobsDB = {};
+
 const TEMP_DIR = path.join(__dirname, 'temp');
-if (!fs.existsSync(TEMP_DIR)) {
-    fs.mkdirSync(TEMP_DIR, { recursive: true });
-}
+if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 
-// Rota inicial (Health Check)
-app.get('/', (req, res) => {
-    res.send('🚀 Bizerra Clipes Backend - Sistema Docker Operacional!');
+app.use('/temp', express.static(TEMP_DIR));
+
+app.get('/health', (req, res) => res.json({ status: "online", time: new Date().toISOString() }));
+
+app.get('/api/users', (req, res) => res.json(usersDB));
+
+app.post('/api/register', (req, res) => {
+  const { name, email, password } = req.body;
+  if (usersDB.find(u => u.email === email)) return res.status(400).json({ error: "E-mail já cadastrado." });
+  const newUser = {
+    id: `user-${Date.now()}`,
+    name, email, password,
+    credits: 70,
+    role: email === 'wesleybizerra@hotmail.com' ? 'ADMIN' : 'USER',
+    plan: 'FREE',
+    createdAt: new Date().toISOString()
+  };
+  usersDB.push(newUser);
+  res.json(newUser);
 });
 
-// Rota de processamento de vídeos do YouTube
-app.post('/api/generate-real-clips', async (req, res) => {
-    const { videoUrl, userId } = req.body;
-    
-    if (!videoUrl) {
-        return res.status(400).json({ error: "URL do vídeo é obrigatória" });
-    }
+app.post('/api/login', (req, res) => {
+  const { email, password } = req.body;
+  const user = usersDB.find(u => u.email === email);
+  if (!user) return res.status(404).json({ error: "Usuário não encontrado." });
+  if (password && user.password !== password) return res.status(401).json({ error: "Senha incorreta." });
+  res.json(user);
+});
 
-    const videoId = Date.now();
-    const inputPath = path.join(TEMP_DIR, `input_${videoId}.mp4`);
-    
-    console.log(`[DOCKER-PROC] Iniciando download para ${userId}: ${videoUrl}`);
+app.put('/api/users/:id/credits', (req, res) => {
+  const userIndex = usersDB.findIndex(u => u.id === req.params.id);
+  if (userIndex === -1) return res.status(404).json({ error: "Usuário não encontrado." });
+  usersDB[userIndex].credits += req.body.amount;
+  res.json(usersDB[userIndex]);
+});
 
-    // No Docker, o yt-dlp já está no PATH do sistema.
-    // Limitamos a 720p para evitar que o Render mate o processo por falta de memória (plano free).
-    const downloadCmd = `yt-dlp -f "bestvideo[height<=720]+bestaudio/best[height<=720]" --merge-output-format mp4 --no-check-certificates "${videoUrl}" -o "${inputPath}"`;
-
-    exec(downloadCmd, (error, stdout, stderr) => {
-        if (error) {
-            console.error("[ERRO YT-DLP]:", stderr);
-            return res.status(500).json({ 
-                error: "Erro no download do vídeo. Verifique o link.",
-                details: stderr 
-            });
-        }
-
-        console.log(`[SUCESSO] Vídeo baixado no container: ${inputPath}`);
-        
-        res.json({ 
-            status: "success",
-            message: "Vídeo baixado com sucesso no servidor Docker!",
-            videoId: videoId
-        });
-
-        // Limpeza após 30 minutos
-        setTimeout(() => {
-            if (fs.existsSync(inputPath)) {
-                fs.unlinkSync(inputPath);
-                console.log(`[LIMPEZA] Arquivo removido para poupar espaço: ${inputPath}`);
-            }
-        }, 1800000);
+app.post('/api/create-preference', async (req, res) => {
+  if (!mpClient) return res.status(500).json({ error: "Token Mercado Pago não configurado." });
+  try {
+    const { userId, planId, planName, price } = req.body;
+    const preference = new Preference(mpClient);
+    const result = await preference.create({
+      body: {
+        items: [{ title: planName, quantity: 1, unit_price: Number(price), currency_id: 'BRL' }],
+        back_urls: {
+          success: `https://bizerraclipes.netlify.app/#/dashboard?payment=success&mock_plan=${planId}`,
+          failure: `https://bizerraclipes.netlify.app/#/dashboard?payment=failure`,
+          pending: `https://bizerraclipes.netlify.app/#/dashboard?payment=pending`
+        },
+        auto_return: 'approved',
+        external_reference: userId
+      }
     });
+    res.json({ init_point: result.init_point });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
-// Porta padrão do Render ou 10000
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, TEMP_DIR),
+  filename: (req, file, cb) => cb(null, `src_${Date.now()}_${file.originalname.replace(/\s+/g, '_')}`)
+});
+const upload = multer({ storage, limits: { fileSize: 500 * 1024 * 1024 } });
+
+app.post('/api/generate-real-clips', upload.single('video'), async (req, res) => {
+  const videoFile = req.file;
+  if (!videoFile) return res.status(400).json({ error: "Arquivo não recebido." });
+
+  const jobID = `job_${Date.now()}`;
+  jobsDB[jobID] = { status: 'processing', progress: 0, totalClips: 10, currentClip: 0, clips: [] };
+  res.json({ jobId: jobID });
+
+  const inputPath = videoFile.path;
+  const sessionID = Date.now();
+
+  (async () => {
+    try {
+      const { stdout: dur } = await execPromise(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${inputPath}"`);
+      const total = parseFloat(dur.trim());
+
+      for (let i = 0; i < 10; i++) {
+        jobsDB[jobID].currentClip = i + 1;
+        jobsDB[jobID].progress = Math.floor((i / 10) * 100);
+
+        let d = 45;
+        let s = Math.floor(Math.random() * (total - d - 5)) + 2;
+        const outName = `clip_${sessionID}_${i}.mp4`;
+        const outPath = path.join(TEMP_DIR, outName);
+
+        const filter = `scale=w=1080:h=1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1`;
+        const cmd = `ffmpeg -ss ${s} -t ${d} -i "${inputPath}" -vf "${filter}" -c:v libx264 -preset ultrafast -crf 26 -c:a aac -ac 2 -y "${outPath}"`;
+
+        await execPromise(cmd);
+        jobsDB[jobID].clips.push({
+          id: `${sessionID}-${i}`,
+          title: `Corte Viral #${i + 1}`,
+          videoUrl: `/temp/${outName}`,
+          thumbnail: `https://picsum.photos/seed/${sessionID + i}/400/700`,
+          duration: d.toString()
+        });
+      }
+      jobsDB[jobID].status = 'completed';
+      jobsDB[jobID].progress = 100;
+      if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
+    } catch (err) {
+      jobsDB[jobID].status = 'error';
+      jobsDB[jobID].error = err.message;
+      if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
+    }
+  })();
+});
+
+app.get('/api/jobs/:id', (req, res) => {
+  const job = jobsDB[req.params.id];
+  if (!job) return res.status(404).json({ error: "Job não encontrado." });
+  res.json(job);
+});
+
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`\n============================================`);
-    console.log(`   BACKEND DOCKER PRONTO PARA PRODUÇÃO`);
-    console.log(`   Escutando em: http://0.0.0.0:${PORT}`);
-    console.log(`============================================\n`);
+  console.log(`>>> MOTOR BIZERRA V10 ATIVO NA PORTA ${PORT}`);
+  console.log(`>>> ESCUTANDO EM 0.0.0.0`);
 });

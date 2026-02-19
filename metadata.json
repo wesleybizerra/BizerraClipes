@@ -1,6 +1,7 @@
+
 {
   "name": "Bizerra Clipes",
-  "description": "A high-performance SaaS platform that automatically generates viral clips from YouTube or MP4 uploads using AI, featuring integrated payments, credit systems, and advanced video processing workflows.",
+  "description": "A high-performance SaaS platform that automatically generates viral clips from YouTube or MP4 uploads using AI.",
   "requestFramePermissions": [
     "camera",
     "microphone"

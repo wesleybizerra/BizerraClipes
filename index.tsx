@@ -1,7 +1,6 @@
-
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import App from './App.tsx';
+import App from './App';
 
 const container = document.getElementById('root');
 
@@ -12,6 +11,7 @@ if (!container) {
 const root = createRoot(container);
 root.render(
   <React.StrictMode>
+    {/* Removed redundant AuthProvider wrapper here as it is already provided inside the App component */}
     <App />
   </React.StrictMode>
 );

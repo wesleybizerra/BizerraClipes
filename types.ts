@@ -33,7 +33,7 @@ export interface Clip {
 }
 
 export interface GenerationSettings {
-  durationRange: '30-60' | '60-90' | '90-120' | '120-150' | '150-180';
+  durationRange: '61-90' | '90-120' | '120-150' | '150-180' | '61-180' | '60-180';
   subtitleStyle: {
     color: string;
     size: 'small' | 'medium' | 'large';

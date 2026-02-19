@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../AuthContext.tsx';
@@ -11,14 +10,12 @@ const Dashboard: React.FC = () => {
   const location = useLocation();
 
   useEffect(() => {
-    // Lógica para capturar retorno de pagamento (Real ou Simulado)
     const params = new URLSearchParams(location.search);
     const paymentStatus = params.get('payment');
     const mockPlan = params.get('mock_plan');
 
     if (paymentStatus === 'success' && user) {
       if (mockPlan) {
-        // Se for uma simulação (sem backend), adicionamos créditos manualmente para teste
         const mockCredits: Record<string, number> = { 'CLASSIC': 1000, 'MEDIUM': 2000, 'PROFESSIONAL': 3000 };
         api.updateUserCredits(user.id, mockCredits[mockPlan] || 0).then(() => {
           alert("SIMULAÇÃO: Pagamento aprovado! Créditos adicionados com sucesso.");
@@ -36,30 +33,37 @@ const Dashboard: React.FC = () => {
 
   const NavigationLinks = () => (
     <div className="space-y-2">
-      <Link 
-        to="/dashboard" 
+      <Link
+        to="/dashboard"
         onClick={() => setMobileMenuOpen(false)}
-        className="flex items-center gap-3 px-4 py-3.5 bg-green-500/10 text-green-500 rounded-2xl font-bold transition-all border border-green-500/10"
+        className={`flex items-center gap-3 px-4 py-3.5 rounded-2xl font-bold transition-all border ${location.pathname === '/dashboard' ? 'bg-green-500/10 text-green-500 border-green-500/10' : 'text-slate-400 hover:bg-slate-800 hover:text-white border-transparent'}`}
       >
         <i className="fa-solid fa-house-chimney w-5"></i> Início
       </Link>
-      <Link 
-        to="/gerador" 
+      <Link
+        to="/gerador"
         onClick={() => setMobileMenuOpen(false)}
-        className="flex items-center gap-3 px-4 py-3.5 text-slate-400 hover:bg-slate-800 hover:text-white rounded-2xl transition-all"
+        className={`flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all border ${location.pathname === '/gerador' ? 'bg-green-500/10 text-green-500 border-green-500/10' : 'text-slate-400 hover:bg-slate-800 hover:text-white border-transparent font-medium'}`}
       >
         <i className="fa-solid fa-clapperboard w-5"></i> Gerar Clipes
       </Link>
-      <Link 
-        to="/planos" 
+      <Link
+        to="/galeria"
         onClick={() => setMobileMenuOpen(false)}
-        className="flex items-center gap-3 px-4 py-3.5 text-slate-400 hover:bg-slate-800 hover:text-white rounded-2xl transition-all"
+        className={`flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all border ${location.pathname === '/galeria' ? 'bg-green-500/10 text-green-500 border-green-500/10' : 'text-slate-400 hover:bg-slate-800 hover:text-white border-transparent font-medium'}`}
+      >
+        <i className="fa-solid fa-layer-group w-5"></i> Galeria de Clipes
+      </Link>
+      <Link
+        to="/planos"
+        onClick={() => setMobileMenuOpen(false)}
+        className={`flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all border ${location.pathname === '/planos' ? 'bg-green-500/10 text-green-500 border-green-500/10' : 'text-slate-400 hover:bg-slate-800 hover:text-white border-transparent font-medium'}`}
       >
         <i className="fa-solid fa-rocket w-5"></i> Planos
       </Link>
       {user.role === UserRole.ADMIN && (
-        <Link 
-          to="/admin" 
+        <Link
+          to="/admin"
           onClick={() => setMobileMenuOpen(false)}
           className="flex items-center gap-3 px-4 py-3.5 text-purple-400 hover:bg-slate-800 rounded-2xl transition-all border border-transparent hover:border-purple-500/20"
         >
@@ -73,7 +77,7 @@ const Dashboard: React.FC = () => {
     <div className="flex min-h-screen bg-slate-950 text-white relative">
       {/* Overlay Mobile */}
       {mobileMenuOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-40 md:hidden"
           onClick={() => setMobileMenuOpen(false)}
         ></div>
@@ -85,7 +89,7 @@ const Dashboard: React.FC = () => {
           <i className="fa-solid fa-bolt text-green-500"></i>
           BIZERRA<span className="text-green-500">CLIPES</span>
         </div>
-        <button 
+        <button
           onClick={() => setMobileMenuOpen(true)}
           className="bg-slate-900 border border-slate-800 w-10 h-10 rounded-xl text-green-500 flex items-center justify-center"
         >
@@ -153,7 +157,7 @@ const Dashboard: React.FC = () => {
 
             <Link to="/gerador" className="bg-green-500 hover:bg-green-400 p-6 md:p-8 rounded-[32px] shadow-2xl transition-all group overflow-hidden relative flex flex-col justify-between min-h-[160px]">
               <div className="relative z-10">
-                <h3 className="text-2xl md:text-3xl font-black text-slate-950 leading-none tracking-tighter">CRIAR<br/>CLIPES</h3>
+                <h3 className="text-2xl md:text-3xl font-black text-slate-950 leading-none tracking-tighter">CRIAR<br />CLIPES</h3>
                 <p className="text-slate-950/70 font-bold mt-2 text-xs flex items-center gap-2">
                   Começar produção <i className="fa-solid fa-arrow-right group-hover:translate-x-2 transition-transform"></i>
                 </p>

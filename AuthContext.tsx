@@ -1,6 +1,5 @@
 
-// Import React to resolve 'Cannot find namespace React' when using React.FC or React.ReactNode
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from './types.ts';
 
 interface AuthContextType {
@@ -20,16 +19,20 @@ export const useAuth = () => {
   return context;
 };
 
-// Fixed missing React import for React.FC and React.ReactNode types
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(() => {
     try {
       const saved = localStorage.getItem('clipflow_user');
       return saved ? JSON.parse(saved) : null;
-    } catch (e) {
-      return null;
-    }
+    } catch (e) { return null; }
   });
+
+  // Sempre que o app inicia, tenta atualizar os dados do usuário com o servidor
+  useEffect(() => {
+    if (user) {
+      refreshUser();
+    }
+  }, []);
 
   const login = async (email: string, password?: string) => {
     const { api } = await import('./services/api.ts');
@@ -56,7 +59,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       api.login(user.email).then(userData => {
         setUser(userData);
         localStorage.setItem('clipflow_user', JSON.stringify(userData));
-      }).catch(err => console.error("Falha ao atualizar usuário:", err));
+      }).catch(() => {
+        // Se o servidor resetou (Railway in-memory), o usuário pode ser deslogado ou recriado
+        console.log("Sessão expirada ou servidor reiniciado.");
+      });
     });
   };
 

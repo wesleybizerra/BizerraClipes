@@ -1,107 +1,141 @@
-import { User, UserRole, SubscriptionPlan, Clip, GenerationSettings } from '../types.ts';
-import { INITIAL_CREDITS, ADMIN_EMAIL } from '../constants.ts';
 
-// IMPORTANTE: Substitua pela URL que o Render te fornecer após o deploy (Ex: https://bizerra-backend.onrender.com)
-const BACKEND_URL = "https://sua-url-no-render.onrender.com";
+import { User, Clip } from '../types.ts';
+
+/**
+ * ATENÇÃO WESLEY: 
+ * 1. Vá no painel do Railway em 'Settings' -> 'Public Networking'.
+ * 2. Clique em 'Generate Domain' (se ainda não tiver um).
+ * 3. Copie a URL gerada (ex: https://bizerra-production.up.railway.app)
+ * 4. Cole ela abaixo na variável RAILWAY_URL.
+ */
+const RAILWAY_URL = 'https://bizerraclipes-production.up.railway.app';
+
+const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const BACKEND_URL = isLocal ? 'http://localhost:10000' : RAILWAY_URL;
+
+console.log(`[Bizerra System] Conectando ao motor em: ${BACKEND_URL}`);
 
 export const api = {
+  checkHealth: async (): Promise<boolean> => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/health`);
+      return response.ok;
+    } catch (e) {
+      return false;
+    }
+  },
+
   getAllUsers: async (): Promise<User[]> => {
-    const data = localStorage.getItem('clipflow_db_production_v1');
-    const db = data ? JSON.parse(data) : { users: [] };
-    return db.users;
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/users`);
+      return await response.json();
+    } catch (e) { return []; }
   },
 
   register: async (email: string, name: string, password: string): Promise<User> => {
-    const data = localStorage.getItem('clipflow_db_production_v1');
-    const db = data ? JSON.parse(data) : { users: [] };
-    
-    if (db.users.find((u: any) => u.email === email)) {
-      throw new Error("E-mail já cadastrado. Tente outro.");
+    const response = await fetch(`${BACKEND_URL}/api/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, name, password })
+    });
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error || "Erro no cadastro.");
     }
-
-    const newUser: User = {
-      id: `user-${Date.now()}`,
-      email,
-      name,
-      password,
-      credits: INITIAL_CREDITS,
-      role: email === ADMIN_EMAIL ? UserRole.ADMIN : UserRole.USER,
-      plan: SubscriptionPlan.FREE,
-      createdAt: new Date().toISOString()
-    };
-
-    db.users.push(newUser);
-    localStorage.setItem('clipflow_db_production_v1', JSON.stringify(db));
-    return newUser;
-  },
-
-  generateClips: async (userId: string, videoUrl: string, settings: GenerationSettings): Promise<Clip[]> => {
-    console.log(`[API] Solicitando geração de clipes para: ${videoUrl}`);
-    
-    try {
-        const response = await fetch(`${BACKEND_URL}/api/generate-real-clips`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId, videoUrl })
-        });
-        
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || "Erro no processamento do servidor");
-        }
-        
-        const data = await response.json();
-        console.log("[API] Resposta do servidor:", data);
-    } catch (e) {
-        console.error("[API] Falha ao conectar com o backend real. Verifique se o BACKEND_URL está correto e o servidor está online.");
-        console.error("[API] Detalhes do erro:", e);
-        // Opcional: Você pode optar por lançar o erro para o usuário ver na tela
-        // throw e;
-    }
-
-    // Mantemos a simulação visual para que o app continue funcional durante os testes de infraestrutura
-    await new Promise(resolve => setTimeout(resolve, 8000));
-    
-    const sampleVideos = [
-      'https://assets.mixkit.co/videos/preview/mixkit-girl-in-neon-lighting-in-the-rain-31242-large.mp4',
-      'https://assets.mixkit.co/videos/preview/mixkit-waves-in-the-water-1164-large.mp4'
-    ];
-
-    await api.updateUserCredits(userId, -10);
-
-    return Array.from({ length: 20 }).map((_, i) => ({
-      id: `clip-${i}-${Date.now()}`,
-      title: `Corte Viral #${i + 1}`,
-      thumbnail: `https://picsum.photos/seed/${i + 100}/400/700`,
-      videoUrl: sampleVideos[i % sampleVideos.length],
-      duration: settings.durationRange,
-      startTime: i * 20,
-      endTime: (i + 1) * 20
-    }));
+    return await response.json();
   },
 
   login: async (email: string, password?: string): Promise<User> => {
-    const data = localStorage.getItem('clipflow_db_production_v1');
-    const db = data ? JSON.parse(data) : { users: [] };
-    const user = db.users.find((u: any) => u.email === email);
-    
-    if (!user) throw new Error("Usuário não encontrado");
-    if (password && user.password && user.password !== password) {
-      throw new Error("Senha incorreta");
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Credenciais inválidas.");
+      }
+      return await response.json();
+    } catch (e) {
+      console.error("Erro de conexão detalhado:", e);
+      throw new Error(`Não foi possível conectar ao servidor. Verifique se a URL ${BACKEND_URL} está correta e online no Railway.`);
     }
-    
-    return user;
   },
-  
+
   updateUserCredits: async (userId: string, amount: number): Promise<User> => {
-      const data = localStorage.getItem('clipflow_db_production_v1');
-      const db = data ? JSON.parse(data) : { users: [] };
-      const userIndex = db.users.findIndex((u: any) => u.id === userId);
-      
-      if (userIndex === -1) throw new Error("Usuário não encontrado");
-      
-      db.users[userIndex].credits += amount;
-      localStorage.setItem('clipflow_db_production_v1', JSON.stringify(db));
-      return db.users[userIndex];
+    const response = await fetch(`${BACKEND_URL}/api/users/${userId}/credits`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount })
+    });
+    return await response.json();
+  },
+
+  createPreference: async (userId: string, planId: string, planName: string, price: number): Promise<string> => {
+    const response = await fetch(`${BACKEND_URL}/api/create-preference`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, planId, planName, price })
+    });
+    const data = await response.json();
+    return data.init_point;
+  },
+
+  getJobStatus: async (jobId: string): Promise<any> => {
+    const response = await fetch(`${BACKEND_URL}/api/jobs/${jobId}`);
+    return await response.json();
+  },
+
+  saveGeneratedClips: (userId: string, clips: Clip[]) => {
+    const data = localStorage.getItem('bizerra_clips_v10');
+    const allClips = data ? JSON.parse(data) : [];
+    const clipsWithMeta = clips.map(c => ({ ...c, userId, createdAt: new Date().toISOString() }));
+    localStorage.setItem('bizerra_clips_v10', JSON.stringify([...clipsWithMeta, ...allClips]));
+  },
+
+  getClips: async (userId?: string): Promise<Clip[]> => {
+    const data = localStorage.getItem('bizerra_clips_v10');
+    const allClips = data ? JSON.parse(data) : [];
+    return userId ? allClips.filter((c: any) => c.userId === userId) : allClips;
+  },
+
+  generateClips: async (userId: string, videoFile: File, onProgress?: (data: any) => void): Promise<Clip[]> => {
+    const formData = new FormData();
+    formData.append('video', videoFile);
+    formData.append('userId', userId);
+
+    const startResponse = await fetch(`${BACKEND_URL}/api/generate-real-clips`, {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!startResponse.ok) throw new Error("Falha ao iniciar motor.");
+    const { jobId } = await startResponse.json();
+
+    return new Promise((resolve, reject) => {
+      const check = async () => {
+        try {
+          const job = await api.getJobStatus(jobId);
+          if (onProgress) onProgress(job);
+          if (job.status === 'completed') {
+            const realClips = job.clips.map((c: any) => ({
+              ...c,
+              videoUrl: `${BACKEND_URL}${c.videoUrl}`
+            }));
+            api.saveGeneratedClips(userId, realClips);
+            await api.updateUserCredits(userId, -10);
+            resolve(realClips);
+          } else if (job.status === 'error') {
+            reject(new Error(job.error));
+          } else {
+            setTimeout(check, 3000);
+          }
+        } catch (e) {
+          reject(new Error("Perda de sinal com o motor."));
+        }
+      };
+      check();
+    });
   }
 };
