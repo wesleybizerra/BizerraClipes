@@ -1,21 +1,25 @@
 
-const express = require('express');
-const cors = require('cors');
-const { exec } = require('child_process');
-const path = require('path');
-const fs = require('fs');
-const multer = require('multer');
-const { MercadoPagoConfig, Preference } = require('mercadopago');
-const util = require('util');
-const { GoogleGenAI } = require("@google/genai");
+import express from 'express';
+import cors from 'cors';
+import { exec } from 'child_process';
+import path from 'path';
+import fs from 'fs';
+import multer from 'multer';
+import { MercadoPagoConfig, Preference } from 'mercadopago';
+import util from 'util';
+import { GoogleGenAI } from "@google/genai";
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const execPromise = util.promisify(exec);
 
 const app = express();
 
-// CONFIGURAÇÃO GEMINI AI
+// Inicialização segura do Gemini
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-// CONFIGURAÇÃO MERCADO PAGO
+// Inicialização segura do Mercado Pago
 const mpClient = process.env.MP_ACCESS_TOKEN
   ? new MercadoPagoConfig({ accessToken: process.env.MP_ACCESS_TOKEN })
   : null;
@@ -23,6 +27,7 @@ const mpClient = process.env.MP_ACCESS_TOKEN
 app.use(cors());
 app.use(express.json());
 
+// Banco de dados em memória (será resetado em cada deploy no Railway)
 let usersDB = [
   {
     id: 'admin-1',
@@ -43,7 +48,12 @@ if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 
 app.use('/temp', express.static(TEMP_DIR));
 
-app.get('/health', (req, res) => res.json({ status: "online", motor: "Gemini Hybrid V10" }));
+// Endpoint de Health Check
+app.get('/health', (req, res) => res.json({
+  status: "online",
+  motor: "Gemini 3 Pro Hybrid",
+  timestamp: new Date().toISOString()
+}));
 
 app.get('/api/users', (req, res) => res.json(usersDB));
 
@@ -78,7 +88,7 @@ app.put('/api/users/:id/credits', (req, res) => {
 });
 
 app.post('/api/create-preference', async (req, res) => {
-  if (!mpClient) return res.status(500).json({ error: "Token Mercado Pago não configurado." });
+  if (!mpClient) return res.status(500).json({ error: "Motor de pagamentos não configurado no Railway (MP_ACCESS_TOKEN faltando)." });
   try {
     const { userId, planId, planName, price } = req.body;
     const preference = new Preference(mpClient);
@@ -106,26 +116,33 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage, limits: { fileSize: 500 * 1024 * 1024 } });
 
-// Lógica Inteligente de Segmentação
+// Lógica de Curadoria Viral via Gemini
 async function getSmartTimestamps(duration) {
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: `Você é um estrategista de vídeos virais. O vídeo tem ${duration} segundos. 
-            Sugira 10 timestamps de início (em segundos) para clipes de 45 a 60 segundos que teriam maior chance de viralizar. 
-            Retorne APENAS uma lista de números separados por vírgula. Exemplo: 10, 45, 120...`,
+      model: 'gemini-3-flash-preview',
+      contents: `Analise um vídeo de ${duration} segundos. 
+            Identifique os 10 melhores momentos (timestamps de início em segundos) para criar cortes verticais virais de 45-60 segundos.
+            Retorne apenas os números separados por vírgula.`,
     });
-    const text = response.text;
-    return text.split(',').map(n => parseFloat(n.trim())).filter(n => n < duration - 60);
+
+    const text = response.text || "";
+    const points = text.split(',')
+      .map(n => parseFloat(n.trim()))
+      .filter(n => !isNaN(n) && n < duration - 60);
+
+    return points.length >= 10 ? points.slice(0, 10) : points;
   } catch (e) {
-    // Fallback caso a IA falhe
-    return Array.from({ length: 10 }, () => Math.floor(Math.random() * (duration - 70)) + 5);
+    console.error("Erro Gemini:", e.message);
+    // Fallback matemático se a IA falhar
+    const interval = Math.floor(duration / 12);
+    return Array.from({ length: 10 }, (_, i) => (i + 1) * interval);
   }
 }
 
 app.post('/api/generate-real-clips', upload.single('video'), async (req, res) => {
   const videoFile = req.file;
-  if (!videoFile) return res.status(400).json({ error: "Arquivo não recebido." });
+  if (!videoFile) return res.status(400).json({ error: "Nenhum vídeo enviado." });
 
   const jobID = `job_${Date.now()}`;
   jobsDB[jobID] = { status: 'processing', progress: 0, totalClips: 10, currentClip: 0, clips: [] };
@@ -147,30 +164,30 @@ app.post('/api/generate-real-clips', upload.single('video'), async (req, res) =>
         jobsDB[jobID].currentClip = i + 1;
         jobsDB[jobID].progress = Math.floor((i / 10) * 100);
 
-        let d = 50; // Duração ideal para Reels/TikTok
-        let s = timestamps[i] || (i * 60);
-
+        const startTime = timestamps[i] || (i * 60);
+        const duration = 50;
         const outName = `clip_${sessionID}_${i}.mp4`;
         const outPath = path.join(TEMP_DIR, outName);
 
-        // Filtro Pro: Centraliza e corta para 9:16 sem distorção
+        // Filtro para Redes Sociais: 1080x1920 (Vertical 9:16)
         const filter = `scale=w=1080:h=1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1`;
-        const cmd = `ffmpeg -ss ${s} -t ${d} -i "${inputPath}" -vf "${filter}" -c:v libx264 -preset ultrafast -crf 23 -c:a aac -ac 2 -b:a 192k -y "${outPath}"`;
+        const cmd = `ffmpeg -ss ${startTime} -t ${duration} -i "${inputPath}" -vf "${filter}" -c:v libx264 -preset ultrafast -crf 23 -c:a aac -ac 2 -b:a 128k -y "${outPath}"`;
 
         await execPromise(cmd);
 
         jobsDB[jobID].clips.push({
           id: `${sessionID}-${i}`,
-          title: `Corte Viral #${i + 1} (Inteligência AI)`,
+          title: `Viral Hook #${i + 1} (IA Powered)`,
           videoUrl: `/temp/${outName}`,
           thumbnail: `https://picsum.photos/seed/${sessionID + i}/400/700`,
-          duration: d.toString()
+          duration: duration.toString()
         });
       }
       jobsDB[jobID].status = 'completed';
       jobsDB[jobID].progress = 100;
       if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
     } catch (err) {
+      console.error("Erro no Processamento:", err);
       jobsDB[jobID].status = 'error';
       jobsDB[jobID].error = err.message;
       if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
@@ -186,5 +203,7 @@ app.get('/api/jobs/:id', (req, res) => {
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`>>> MOTOR BIZERRA AI V10 ATIVO NA PORTA ${PORT}`);
+  console.log(`\n🚀 BIZERRA ENGINE V10 ONLINE`);
+  console.log(`📍 Porta: ${PORT}`);
+  console.log(`🧠 AI Mode: ${process.env.API_KEY ? 'ACTIVE' : 'FALLBACK'}\n`);
 });
