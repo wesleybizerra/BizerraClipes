@@ -1,4 +1,3 @@
-
 import express from 'express';
 import cors from 'cors';
 import { exec } from 'child_process';
@@ -27,7 +26,7 @@ const mpClient = process.env.MP_ACCESS_TOKEN
 app.use(cors());
 app.use(express.json());
 
-// Banco de dados em memória (será resetado em cada deploy no Railway)
+// Banco de dados em memória
 let usersDB = [
   {
     id: 'admin-1',
@@ -48,10 +47,11 @@ if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 
 app.use('/temp', express.static(TEMP_DIR));
 
-// Endpoint de Health Check
+// Endpoint de Health Check para o Railway
 app.get('/health', (req, res) => res.json({
   status: "online",
-  motor: "Gemini 3 Pro Hybrid",
+  motor: "Bizerra V10",
+  ffmpeg: true,
   timestamp: new Date().toISOString()
 }));
 
@@ -88,7 +88,7 @@ app.put('/api/users/:id/credits', (req, res) => {
 });
 
 app.post('/api/create-preference', async (req, res) => {
-  if (!mpClient) return res.status(500).json({ error: "Motor de pagamentos não configurado no Railway (MP_ACCESS_TOKEN faltando)." });
+  if (!mpClient) return res.status(500).json({ error: "Configuração do Mercado Pago ausente." });
   try {
     const { userId, planId, planName, price } = req.body;
     const preference = new Preference(mpClient);
@@ -116,25 +116,16 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage, limits: { fileSize: 500 * 1024 * 1024 } });
 
-// Lógica de Curadoria Viral via Gemini
 async function getSmartTimestamps(duration) {
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `Analise um vídeo de ${duration} segundos. 
-            Identifique os 10 melhores momentos (timestamps de início em segundos) para criar cortes verticais virais de 45-60 segundos.
-            Retorne apenas os números separados por vírgula.`,
+      contents: `Analise um vídeo de ${duration} segundos. Identifique os 10 melhores momentos (em segundos) para cortes virais. Retorne apenas os números separados por vírgula.`,
     });
-
     const text = response.text || "";
-    const points = text.split(',')
-      .map(n => parseFloat(n.trim()))
-      .filter(n => !isNaN(n) && n < duration - 60);
-
+    const points = text.split(',').map(n => parseFloat(n.trim())).filter(n => !isNaN(n) && n < duration - 60);
     return points.length >= 10 ? points.slice(0, 10) : points;
   } catch (e) {
-    console.error("Erro Gemini:", e.message);
-    // Fallback matemático se a IA falhar
     const interval = Math.floor(duration / 12);
     return Array.from({ length: 10 }, (_, i) => (i + 1) * interval);
   }
@@ -165,19 +156,18 @@ app.post('/api/generate-real-clips', upload.single('video'), async (req, res) =>
         jobsDB[jobID].progress = Math.floor((i / 10) * 100);
 
         const startTime = timestamps[i] || (i * 60);
-        const duration = 50;
+        const duration = 45;
         const outName = `clip_${sessionID}_${i}.mp4`;
         const outPath = path.join(TEMP_DIR, outName);
 
-        // Filtro para Redes Sociais: 1080x1920 (Vertical 9:16)
         const filter = `scale=w=1080:h=1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1`;
-        const cmd = `ffmpeg -ss ${startTime} -t ${duration} -i "${inputPath}" -vf "${filter}" -c:v libx264 -preset ultrafast -crf 23 -c:a aac -ac 2 -b:a 128k -y "${outPath}"`;
+        const cmd = `ffmpeg -ss ${startTime} -t ${duration} -i "${inputPath}" -vf "${filter}" -c:v libx264 -preset ultrafast -crf 28 -c:a aac -b:a 128k -y "${outPath}"`;
 
         await execPromise(cmd);
 
         jobsDB[jobID].clips.push({
           id: `${sessionID}-${i}`,
-          title: `Viral Hook #${i + 1} (IA Powered)`,
+          title: `Corte Viral #${i + 1}`,
           videoUrl: `/temp/${outName}`,
           thumbnail: `https://picsum.photos/seed/${sessionID + i}/400/700`,
           duration: duration.toString()
@@ -187,7 +177,6 @@ app.post('/api/generate-real-clips', upload.single('video'), async (req, res) =>
       jobsDB[jobID].progress = 100;
       if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
     } catch (err) {
-      console.error("Erro no Processamento:", err);
       jobsDB[jobID].status = 'error';
       jobsDB[jobID].error = err.message;
       if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
@@ -203,7 +192,5 @@ app.get('/api/jobs/:id', (req, res) => {
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n🚀 BIZERRA ENGINE V10 ONLINE`);
-  console.log(`📍 Porta: ${PORT}`);
-  console.log(`🧠 AI Mode: ${process.env.API_KEY ? 'ACTIVE' : 'FALLBACK'}\n`);
+  console.log(`🚀 BIZERRA MOTOR V10 RODANDO NA PORTA ${PORT}`);
 });
