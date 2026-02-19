@@ -3,5 +3,9 @@ builder = "dockerfile"
 dockerfilePath = "Dockerfile"
 
 [deploy]
+startCommand = "node server.js"
 restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 5
+restartPolicyMaxRetries = 10
+healthcheckPath = "/health"
+healthcheckTimeout = 120
+serviceName = "bizerraclipes-motor"
