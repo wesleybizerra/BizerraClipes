@@ -26,6 +26,10 @@ const pool = new Pool({
 // Inicialização do Banco de Dados
 const initDB = async () => {
   try {
+    if (!process.env.DATABASE_URL) {
+      console.warn("⚠️ DATABASE_URL não encontrada. O modo persistente não funcionará.");
+      return;
+    }
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
@@ -39,7 +43,7 @@ const initDB = async () => {
       );
       CREATE TABLE IF NOT EXISTS jobs (
         id TEXT PRIMARY KEY,
-        user_id TEXT REFERENCES users(id),
+        user_id TEXT,
         status TEXT,
         progress INTEGER,
         current_clip INTEGER,
@@ -56,7 +60,7 @@ const initDB = async () => {
     `);
     console.log("✅ Banco de Dados PostgreSQL Pronto!");
   } catch (err) {
-    console.error("❌ Erro ao iniciar banco:", err);
+    console.error("❌ Erro ao iniciar banco:", err.message);
   }
 };
 initDB();
@@ -81,7 +85,7 @@ const mpClient = process.env.MP_ACCESS_TOKEN
   : null;
 
 app.post('/api/create-preference', async (req, res) => {
-  if (!mpClient) return res.status(500).json({ error: "Mercado Pago não configurado no servidor." });
+  if (!mpClient) return res.status(500).json({ error: "Mercado Pago não configurado." });
   try {
     const { planName, price, userId } = req.body;
     const preference = await new Preference(mpClient).create({
@@ -138,7 +142,16 @@ app.put('/api/users/:id/credits', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-const upload = multer({ dest: TEMP_DIR });
+// Configuração do Multer com preservação de extensão
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, TEMP_DIR),
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+const upload = multer({ storage: storage });
+
 app.post('/api/generate-real-clips', upload.single('video'), async (req, res) => {
   const jobID = `job_${Date.now()}`;
   const userId = req.body.userId;
@@ -156,20 +169,34 @@ app.post('/api/generate-real-clips', upload.single('video'), async (req, res) =>
         const outName = `clip_${jobID}.mp4`;
         const outPath = path.join(TEMP_DIR, outName);
 
-        // Comando FFmpeg otimizado
-        await execPromise(`ffmpeg -i "${req.file.path}" -t 15 -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" -c:v libx264 -preset ultrafast -y "${outPath}"`);
+        console.log(`🎬 Iniciando FFmpeg para arquivo: ${req.file.path}`);
 
-        const clips = [{ id: jobID, title: "Corte Viral Inteligente", videoUrl: `/temp/${outName}`, thumbnail: "https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400", duration: "15" }];
+        // Comando FFmpeg com mais logs de erro e compatibilidade
+        const ffmpegCmd = `ffmpeg -i "${req.file.path}" -t 15 -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" -c:v libx264 -preset ultrafast -y "${outPath}"`;
+
+        await execPromise(ffmpegCmd);
+
+        const clips = [{
+          id: jobID,
+          title: `Corte Viral ${jobID.slice(-4)}`,
+          videoUrl: `/temp/${outName}`,
+          thumbnail: "https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400",
+          duration: "15"
+        }];
 
         await pool.query(
           'UPDATE jobs SET status = $1, progress = $2, clips = $3 WHERE id = $4',
           ['completed', 100, JSON.stringify(clips), jobID]
         );
-        // Remove o arquivo original para economizar espaço
-        fs.unlinkSync(req.file.path);
+
+        // Limpeza
+        if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+        console.log(`✅ Job ${jobID} concluído com sucesso!`);
+
       } catch (e) {
-        console.error("ERRO CRÍTICO NO MOTOR (FFMPEG):", e.message);
+        console.error("❌ ERRO FFMPEG:", e.stderr || e.message);
         await pool.query('UPDATE jobs SET status = $1, progress = $2 WHERE id = $3', ['error', 0, jobID]);
+        if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
       }
     })();
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -183,11 +210,15 @@ app.get('/api/jobs/:id', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Rota para o React Router (SPA) - DEVE SER A ÚLTIMA
+// Rota SPA para o React
 app.get('*', (req, res) => {
-  res.sendFile(path.join(DIST_PATH, 'index.html'));
+  if (fs.existsSync(path.join(DIST_PATH, 'index.html'))) {
+    res.sendFile(path.join(DIST_PATH, 'index.html'));
+  } else {
+    res.status(404).send("Frontend não encontrado. Execute 'npm run build' primeiro.");
+  }
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Bizerra Clipes FULL-STACK ONLINE na porta ${PORT}`);
+  console.log(`🚀 Motor Bizerra V10 Unificado na porta ${PORT}`);
 });
