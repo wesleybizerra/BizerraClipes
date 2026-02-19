@@ -15,7 +15,8 @@
     "cors": "^2.8.5",
     "mercadopago": "^2.0.8",
     "multer": "^1.4.5-lts.1",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "pg": "^8.11.3"
   },
   "devDependencies": {
     "@types/react": "^18.3.1",

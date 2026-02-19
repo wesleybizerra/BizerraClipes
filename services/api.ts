@@ -1,4 +1,3 @@
-
 import { User, Clip } from '../types.ts';
 
 const RAILWAY_URL = 'https://bizerraclipes-production.up.railway.app';
@@ -16,26 +15,26 @@ export const api = {
   },
 
   login: async (email: string, password?: string): Promise<User> => {
+    let response;
     try {
-      console.log(`[API] Tentando login em: ${BACKEND_URL}/api/login`);
-      const response = await fetch(`${BACKEND_URL}/api/login`, {
+      console.log(`[API] Tentando acesso em: ${BACKEND_URL}/api/login`);
+      response = await fetch(`${BACKEND_URL}/api/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
       });
-
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || "Credenciais inválidas.");
-      }
-      return await response.json();
-    } catch (e: any) {
-      console.error("[ERRO CRÍTICO NO MOTOR]:", e);
-      throw new Error(`ERRO DE CONEXÃO: O navegador não conseguiu falar com o servidor no Railway. 
-      \n1. Verifique se o link ${BACKEND_URL} abre no seu navegador.
-      \n2. Se abrir e mostrar 'ONLINE', o problema é cache ou CORS.
-      \n3. Detalhe técnico: ${e.message}`);
+    } catch (networkError: any) {
+      console.error("[ERRO DE REDE]:", networkError);
+      throw new Error(`O servidor no Railway não respondeu. Certifique-se de que ${BACKEND_URL} está acessível.`);
     }
+
+    if (!response.ok) {
+      const err = await response.json();
+      // Aqui mostramos a mensagem REAL do servidor (ex: "Senha incorreta")
+      throw new Error(err.error || "Erro ao realizar login.");
+    }
+
+    return await response.json();
   },
 
   register: async (email: string, name: string, password: string): Promise<User> => {

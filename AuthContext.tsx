@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from './types.ts';
 
@@ -27,7 +26,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (e) { return null; }
   });
 
-  // Sempre que o app inicia, tenta atualizar os dados do usuário com o servidor
   useEffect(() => {
     if (user) {
       refreshUser();
@@ -56,12 +54,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const refreshUser = () => {
     if (!user) return;
     import('./services/api.ts').then(({ api }) => {
-      api.login(user.email).then(userData => {
+      // Usamos apenas o email para tentar atualizar o perfil,
+      // se o servidor resetar, ele retornará 404 e limparemos o localstorage.
+      api.login(user.email, user.password).then(userData => {
         setUser(userData);
         localStorage.setItem('clipflow_user', JSON.stringify(userData));
-      }).catch(() => {
-        // Se o servidor resetou (Railway in-memory), o usuário pode ser deslogado ou recriado
-        console.log("Sessão expirada ou servidor reiniciado.");
+      }).catch((err) => {
+        console.warn("Sessão perdida (Servidor reiniciou ou senha mudou):", err.message);
+        // Opcional: Se quiser deslogar automaticamente quando o servidor resetar descomente a linha abaixo
+        // logout();
       });
     });
   };
