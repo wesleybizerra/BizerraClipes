@@ -2,15 +2,14 @@ import { User, Clip } from '../types.ts';
 
 /**
  * ATENÇÃO WESLEY: 
- * No painel do Railway, vá em 'Settings' -> 'Public Networking'.
- * Se a URL lá for diferente desta abaixo, você PRECISA trocar aqui.
+ * Se o link no Railway mudar, atualize a URL abaixo.
  */
 const RAILWAY_URL = 'https://bizerraclipes-production.up.railway.app';
 
 const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-const BACKEND_URL = isLocal ? 'http://localhost:10000' : RAILWAY_URL;
+const BACKEND_URL = isLocal ? 'http://localhost:8080' : RAILWAY_URL;
 
-console.log(`[Bizerra System] Tentando conectar ao motor em: ${BACKEND_URL}`);
+console.log(`[Bizerra System] Conectando ao backend em: ${BACKEND_URL}`);
 
 export const api = {
   checkHealth: async (): Promise<boolean> => {
@@ -18,7 +17,6 @@ export const api = {
       const response = await fetch(`${BACKEND_URL}/health`);
       return response.ok;
     } catch (e) {
-      console.error("[Bizerra Error] Falha no Health Check:", e);
       return false;
     }
   },
@@ -56,10 +54,9 @@ export const api = {
       }
       return await response.json();
     } catch (e) {
-      console.error("Erro de conexão detalhado:", e);
-      throw new Error(`ERRO DE CONEXÃO: O site não conseguiu falar com o motor no Railway. 
-      1. Verifique se o deploy no Railway terminou com sucesso.
-      2. Verifique se a URL ${BACKEND_URL} abre no seu navegador.`);
+      throw new Error(`ERRO DE CONEXÃO: O motor no Railway não respondeu. 
+      Isso acontece se o motor estiver em "Build" ou desligado. 
+      Tente abrir ${BACKEND_URL} no navegador para testar.`);
     }
   },
 

@@ -15,30 +15,53 @@ const execPromise = util.promisify(exec);
 
 const app = express();
 
-// Configuração de CORS para aceitar requisições do Netlify
+// CORS TOTALMENTE ABERTO PARA EVITAR BLOQUEIOS
 app.use(cors({
   origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
 app.use(express.json());
 
-// Rota raiz para teste rápido
+// Inicialização segura do Gemini para o servidor NÃO CAIR se a chave estiver vazia
+let ai = null;
+if (process.env.API_KEY) {
+  try {
+    ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    console.log("✅ [Motor] Gemini AI inicializado com sucesso.");
+  } catch (e) {
+    console.error("❌ [Erro] Falha ao carregar Gemini:", e.message);
+  }
+} else {
+  console.warn("⚠️ [Aviso] API_KEY não encontrada. O motor usará timestamps fixos.");
+}
+
+// Rota raiz - O Railway usa isso para saber se o app está vivo
 app.get('/', (req, res) => {
-  res.send(`
+  res.status(200).send(`
         <div style="font-family: sans-serif; text-align: center; padding: 50px; background: #0f172a; color: white;">
             <h1 style="color: #22c55e;">⚡ MOTOR BIZERRA V10 ONLINE</h1>
             <p>Se você está vendo isso, o servidor está rodando perfeitamente!</p>
-            <p style="color: #64748b;">Aguardando comandos do site...</p>
-            <div style="margin-top: 20px; padding: 10px; background: #1e293b; border-radius: 8px; display: inline-block;">
-                Porta Ativa: ${process.env.PORT || 8080}
+            <hr style="border: 0; border-top: 1px solid #1e293b; margin: 20px auto; max-width: 300px;">
+            <div style="font-size: 14px; color: #64748b;">
+                <p>Status: Ativo</p>
+                <p>Porta: ${process.env.PORT || 8080}</p>
+                <p>Gemini: ${ai ? 'Conectado' : 'Modo Offline'}</p>
             </div>
         </div>
     `);
 });
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Endpoint de Health Check
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: "online",
+    motor: "Bizerra V10",
+    ffmpeg: true,
+    timestamp: new Date().toISOString()
+  });
+});
 
 const mpClient = process.env.MP_ACCESS_TOKEN
   ? new MercadoPagoConfig({ accessToken: process.env.MP_ACCESS_TOKEN })
@@ -61,15 +84,7 @@ let jobsDB = {};
 
 const TEMP_DIR = path.join(__dirname, 'temp');
 if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
-
 app.use('/temp', express.static(TEMP_DIR));
-
-app.get('/health', (req, res) => res.json({
-  status: "online",
-  motor: "Bizerra V10",
-  ffmpeg: true,
-  timestamp: new Date().toISOString()
-}));
 
 app.get('/api/users', (req, res) => res.json(usersDB));
 
@@ -133,6 +148,10 @@ const storage = multer.diskStorage({
 const upload = multer({ storage, limits: { fileSize: 500 * 1024 * 1024 } });
 
 async function getSmartTimestamps(duration) {
+  if (!ai) {
+    const interval = Math.floor(duration / 12);
+    return Array.from({ length: 10 }, (_, i) => (i + 1) * interval);
+  }
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -160,7 +179,6 @@ app.post('/api/generate-real-clips', upload.single('video'), async (req, res) =>
 
   (async () => {
     try {
-      console.log(`[Job ${jobID}] Iniciando processamento do arquivo: ${videoFile.filename}`);
       const { stdout: dur } = await execPromise(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${inputPath}"`);
       const totalDuration = parseFloat(dur.trim());
 
@@ -194,7 +212,7 @@ app.post('/api/generate-real-clips', upload.single('video'), async (req, res) =>
       jobsDB[jobID].progress = 100;
       if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
     } catch (err) {
-      console.error(`[Job ${jobID}] ERRO:`, err);
+      console.error(`[Job ${jobID}] Erro Fatal:`, err);
       jobsDB[jobID].status = 'error';
       jobsDB[jobID].error = err.message;
       if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
@@ -208,8 +226,9 @@ app.get('/api/jobs/:id', (req, res) => {
   res.json(job);
 });
 
-// IMPORTANTE: Railway injeta a porta em process.env.PORT, mas fixamos 8080 para bater com o print.
+// IMPORTANTE: Railway injeta a porta em process.env.PORT. 
+// O fallback 8080 deve ser o mesmo configurado no painel do Railway.
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 BIZERRA MOTOR V10 RODANDO NA PORTA ${PORT}`);
+  console.log(`🚀 [Sucesso] Motor Bizerra V10 rodando em: http://0.0.0.0:${PORT}`);
 });
