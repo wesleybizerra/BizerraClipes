@@ -17,58 +17,35 @@ const execPromise = util.promisify(exec);
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// Configuração Postgres
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.DATABASE_URL?.includes('localhost') ? false : { rejectUnauthorized: false }
 });
 
-// Inicialização do Banco de Dados
 const initDB = async () => {
   try {
-    if (!process.env.DATABASE_URL) {
-      console.warn("⚠️ DATABASE_URL não encontrada. O modo persistente não funcionará.");
-      return;
-    }
+    if (!process.env.DATABASE_URL) return;
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        email TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL,
-        credits INTEGER DEFAULT 70,
-        role TEXT DEFAULT 'USER',
-        plan TEXT DEFAULT 'FREE',
+        name TEXT NOT NULL, email TEXT UNIQUE NOT NULL, password TEXT NOT NULL,
+        credits INTEGER DEFAULT 70, role TEXT DEFAULT 'USER', plan TEXT DEFAULT 'FREE',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
       CREATE TABLE IF NOT EXISTS jobs (
-        id TEXT PRIMARY KEY,
-        user_id TEXT,
-        status TEXT,
-        progress INTEGER,
-        current_clip INTEGER,
-        total_clips INTEGER,
-        clips JSONB,
+        id TEXT PRIMARY KEY, user_id TEXT, status TEXT, progress INTEGER,
+        current_clip INTEGER, total_clips INTEGER, clips JSONB,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-
-    await pool.query(`
-      INSERT INTO users (id, name, email, password, credits, role, plan)
-      VALUES ('admin-1', 'Admin Bizerra', 'wesleybizerra@hotmail.com', '123', 9999, 'ADMIN', 'PROFESSIONAL')
-      ON CONFLICT (email) DO NOTHING;
-    `);
-    console.log("✅ Banco de Dados PostgreSQL Pronto!");
-  } catch (err) {
-    console.error("❌ Erro ao iniciar banco:", err.message);
-  }
+    console.log("✅ Banco de Dados Pronto!");
+  } catch (err) { console.error("❌ Erro DB:", err.message); }
 };
 initDB();
 
 app.use(cors());
 app.use(express.json());
 
-// Servir arquivos estáticos do Frontend (Vite Build)
 const DIST_PATH = path.join(__dirname, 'dist');
 app.use(express.static(DIST_PATH));
 
@@ -76,73 +53,8 @@ const TEMP_DIR = path.join(__dirname, 'temp');
 if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 app.use('/temp', express.static(TEMP_DIR));
 
-// API Health
-app.get('/health', (req, res) => res.json({ status: "ok", ffmpeg: true }));
+app.get('/health', (req, res) => res.json({ status: "ok", engine: "V10-Bizerra" }));
 
-// Mercado Pago
-const mpClient = process.env.MP_ACCESS_TOKEN
-  ? new MercadoPagoConfig({ accessToken: process.env.MP_ACCESS_TOKEN })
-  : null;
-
-app.post('/api/create-preference', async (req, res) => {
-  if (!mpClient) return res.status(500).json({ error: "Mercado Pago não configurado." });
-  try {
-    const { planName, price, userId } = req.body;
-    const preference = await new Preference(mpClient).create({
-      body: {
-        items: [{ title: planName, quantity: 1, unit_price: Number(price), currency_id: 'BRL' }],
-        back_urls: {
-          success: `${req.headers.origin}/#/dashboard?payment=success&user=${userId}`,
-          failure: `${req.headers.origin}/#/dashboard?payment=failure`
-        },
-        auto_return: 'approved',
-      }
-    });
-    res.json({ init_point: preference.init_point });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/login', async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
-    const user = result.rows[0];
-    if (!user) return res.status(404).json({ error: "Usuário não encontrado." });
-    if (password && user.password !== password) return res.status(401).json({ error: "Senha incorreta." });
-    res.json(user);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/register', async (req, res) => {
-  try {
-    const { name, email, password } = req.body;
-    const check = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
-    if (check.rows.length > 0) return res.status(400).json({ error: "E-mail já cadastrado." });
-    const id = `user-${Date.now()}`;
-    const result = await pool.query(
-      'INSERT INTO users (id, name, email, password, credits, role, plan) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-      [id, name, email, password, 70, 'USER', 'FREE']
-    );
-    res.json(result.rows[0]);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.get('/api/users', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM users ORDER BY created_at DESC');
-    res.json(result.rows);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.put('/api/users/:id/credits', async (req, res) => {
-  try {
-    const { amount } = req.body;
-    const result = await pool.query('UPDATE users SET credits = credits + $1 WHERE id = $2 RETURNING *', [amount, req.params.id]);
-    res.json(result.rows[0]);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// Configuração do Multer com preservação de extensão
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, TEMP_DIR),
   filename: (req, file, cb) => {
@@ -150,12 +62,12 @@ const storage = multer.diskStorage({
     cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
   }
 });
-const upload = multer({ storage: storage });
+const upload = multer({ storage: storage, limits: { fileSize: 500 * 1024 * 1024 } });
 
 app.post('/api/generate-real-clips', upload.single('video'), async (req, res) => {
   const jobID = `job_${Date.now()}`;
   const userId = req.body.userId;
-  if (!req.file) return res.status(400).json({ error: "Nenhum vídeo enviado." });
+  if (!req.file) return res.status(400).json({ error: "Vídeo não recebido." });
 
   try {
     await pool.query(
@@ -165,16 +77,17 @@ app.post('/api/generate-real-clips', upload.single('video'), async (req, res) =>
     res.json({ jobId: jobID });
 
     (async () => {
+      const inputPath = req.file.path;
+      const outName = `clip_${jobID}.mp4`;
+      const outPath = path.join(TEMP_DIR, outName);
+
       try {
-        const outName = `clip_${jobID}.mp4`;
-        const outPath = path.join(TEMP_DIR, outName);
+        console.log(`🎬 Processando Job ${jobID}...`);
 
-        console.log(`🎬 Iniciando FFmpeg para arquivo: ${req.file.path}`);
+        // IMPORTANTE: maxBuffer de 100MB para evitar que o Node trave com os logs do FFmpeg
+        const ffmpegCmd = `ffmpeg -i "${inputPath}" -ss 00:00:01 -t 15 -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" -c:v libx264 -preset ultrafast -crf 23 -c:a aac -b:a 128k -y "${outPath}"`;
 
-        // Comando FFmpeg com mais logs de erro e compatibilidade
-        const ffmpegCmd = `ffmpeg -i "${req.file.path}" -t 15 -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" -c:v libx264 -preset ultrafast -y "${outPath}"`;
-
-        await execPromise(ffmpegCmd);
+        const { stdout, stderr } = await execPromise(ffmpegCmd, { maxBuffer: 1024 * 1024 * 100 });
 
         const clips = [{
           id: jobID,
@@ -189,36 +102,58 @@ app.post('/api/generate-real-clips', upload.single('video'), async (req, res) =>
           ['completed', 100, JSON.stringify(clips), jobID]
         );
 
-        // Limpeza
-        if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-        console.log(`✅ Job ${jobID} concluído com sucesso!`);
-
+        console.log(`✅ Job ${jobID} Finalizado.`);
       } catch (e) {
-        console.error("❌ ERRO FFMPEG:", e.stderr || e.message);
+        console.error("❌ Erro no FFmpeg:", e.stderr || e.message);
         await pool.query('UPDATE jobs SET status = $1, progress = $2 WHERE id = $3', ['error', 0, jobID]);
-        if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+      } finally {
+        if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
       }
     })();
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+  }
+});
+
+app.post('/api/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    const user = result.rows[0];
+    if (!user) return res.status(404).json({ error: "Usuário inexistente." });
+    if (password && user.password !== password) return res.status(401).json({ error: "Senha inválida." });
+    res.json(user);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get('/api/jobs/:id', async (req, res) => {
+app.post('/api/register', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM jobs WHERE id = $1', [req.params.id]);
-    if (result.rows.length === 0) return res.status(404).json({ status: 'not_found' });
+    const { name, email, password } = req.body;
+    const id = `user-${Date.now()}`;
+    const result = await pool.query(
+      'INSERT INTO users (id, name, email, password, credits, role, plan) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email RETURNING *',
+      [id, name, email, password, 70, 'USER', 'FREE']
+    );
     res.json(result.rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Rota SPA para o React
-app.get('*', (req, res) => {
-  if (fs.existsSync(path.join(DIST_PATH, 'index.html'))) {
-    res.sendFile(path.join(DIST_PATH, 'index.html'));
-  } else {
-    res.status(404).send("Frontend não encontrado. Execute 'npm run build' primeiro.");
-  }
+app.get('/api/users', async (req, res) => {
+  const r = await pool.query('SELECT * FROM users ORDER BY created_at DESC');
+  res.json(r.rows);
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Motor Bizerra V10 Unificado na porta ${PORT}`);
+app.put('/api/users/:id/credits', async (req, res) => {
+  const r = await pool.query('UPDATE users SET credits = credits + $1 WHERE id = $2 RETURNING *', [req.body.amount, req.params.id]);
+  res.json(r.rows[0]);
 });
+
+app.get('/api/jobs/:id', async (req, res) => {
+  const r = await pool.query('SELECT * FROM jobs WHERE id = $1', [req.params.id]);
+  res.json(r.rows[0] || { status: 'not_found' });
+});
+
+app.get('*', (req, res) => res.sendFile(path.join(DIST_PATH, 'index.html')));
+
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Motor V10 Online na porta ${PORT}`));
