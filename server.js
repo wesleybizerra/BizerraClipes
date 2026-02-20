@@ -37,8 +37,8 @@ const initDB = async () => {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    console.log("✅ Banco de Dados e Tabelas Prontas!");
-  } catch (err) { console.error("❌ Erro DB Inicialização:", err.message); }
+    console.log("✅ Banco de Dados sincronizado.");
+  } catch (err) { console.error("❌ Erro DB:", err.message); }
 };
 initDB();
 
@@ -52,7 +52,7 @@ const TEMP_DIR = path.join(__dirname, 'temp');
 if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 app.use('/temp', express.static(TEMP_DIR));
 
-app.get('/health', (req, res) => res.json({ status: "ok", engine: "V10-Bizerra-UltraRobust" }));
+app.get('/health', (req, res) => res.json({ status: "ok", engine: "V12-Bizerra-Nitro" }));
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, TEMP_DIR),
@@ -61,15 +61,15 @@ const storage = multer.diskStorage({
     cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
   }
 });
-const upload = multer({ storage: storage, limits: { fileSize: 800 * 1024 * 1024 } });
+const upload = multer({ storage: storage, limits: { fileSize: 1024 * 1024 * 800 } });
 
-// Função para pegar duração real do vídeo
 async function getVideoDuration(filePath) {
   try {
     const { stdout } = await execPromise(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${filePath}"`);
-    return parseFloat(stdout);
+    const duration = parseFloat(stdout);
+    return isNaN(duration) ? 0 : duration;
   } catch (e) {
-    console.error("Erro ffprobe:", e);
+    console.error("ffprobe error:", e);
     return 0;
   }
 }
@@ -77,86 +77,80 @@ async function getVideoDuration(filePath) {
 app.post('/api/generate-real-clips', upload.single('video'), async (req, res) => {
   const jobID = `job_${Date.now()}`;
   const userId = req.body.userId;
-  const TOTAL_CLIPS_TARGET = 10;
+  const TOTAL_CLIPS = 10;
 
-  if (!req.file) return res.status(400).json({ error: "Nenhum arquivo enviado." });
+  if (!req.file) return res.status(400).json({ error: "Arquivo não detectado." });
 
   try {
     await pool.query(
       'INSERT INTO jobs (id, user_id, status, progress, current_clip, total_clips, clips) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-      [jobID, userId, 'analyzing', 0, 0, TOTAL_CLIPS_TARGET, JSON.stringify([])]
+      [jobID, userId, 'analyzing', 0, 0, TOTAL_CLIPS, JSON.stringify([])]
     );
+
+    // Retorno imediato para evitar timeout de conexão HTTP
     res.json({ jobId: jobID });
 
-    // Processamento em Background
+    // Processamento Seguro em Background
     (async () => {
       const inputPath = req.file.path;
       const generatedClips = [];
 
       try {
         const actualDuration = await getVideoDuration(inputPath);
-        console.log(`🎬 Vídeo Recebido. Duração Real: ${actualDuration}s`);
+        if (actualDuration <= 0) throw new Error("Falha ao ler duração do vídeo.");
 
-        if (actualDuration <= 0) throw new Error("Não foi possível ler a duração do vídeo.");
+        let startTimeLimit = Math.max(0, parseInt(req.body.startTime) || 0);
+        let endTimeLimit = Math.min(actualDuration, parseInt(req.body.endTime) || actualDuration);
+        let targetDuration = Math.min(59, Math.max(15, parseInt(req.body.clipDuration) || 15));
 
-        let customStart = Math.max(0, parseInt(req.body.startTime) || 0);
-        let customEnd = Math.min(actualDuration, parseInt(req.body.endTime) || actualDuration);
+        const range = endTimeLimit - startTimeLimit;
+        // Cálculo de passo: distribui os 10 clipes dentro do range selecionado
+        // Se o range for menor que 10 clipes, eles vão se sobrepor automaticamente
+        const intervalStep = range > targetDuration ? (range - targetDuration) / (TOTAL_CLIPS - 1 || 1) : 0;
 
-        // Se o usuário selecionou um range menor que o necessário para 10 clips de 15s
-        // o sistema ajusta o tempo de cada clipe para caber.
-        const rangeDuration = customEnd - customStart;
-        const clipDuration = Math.min(15, rangeDuration / TOTAL_CLIPS_TARGET);
-        const intervalStep = rangeDuration / TOTAL_CLIPS_TARGET;
+        console.log(`🚀 JOB ${jobID}: Range ${startTimeLimit}-${endTimeLimit}s | Clipe: ${targetDuration}s | Passo: ${intervalStep}s`);
 
-        console.log(`⚙️ Config: Start=${customStart}, End=${customEnd}, Step=${intervalStep}s, ClipLen=${clipDuration}s`);
-
-        await pool.query('UPDATE jobs SET status = $1 WHERE id = $2', ['processing', jobID]);
-
-        for (let i = 0; i < TOTAL_CLIPS_TARGET; i++) {
+        for (let i = 0; i < TOTAL_CLIPS; i++) {
           const clipID = `${jobID}_${i}`;
           const outName = `clip_${clipID}.mp4`;
           const outPath = path.join(TEMP_DIR, outName);
 
-          // Garante que o start não ultrapasse o fim do vídeo
-          const startTime = Math.min(customStart + (i * intervalStep), actualDuration - clipDuration);
+          const startAt = Math.min(startTimeLimit + (i * intervalStep), actualDuration - targetDuration);
 
-          console.log(`⏳ Gerando Clipe ${i + 1}/10 em ${startTime.toFixed(2)}s...`);
+          // IMPORTANTE: -ss ANTES de -i para Seek Ultra-Rápido
+          const ffmpegCmd = `ffmpeg -y -ss ${startAt} -t ${targetDuration} -i "${inputPath}" -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" -c:v libx264 -preset superfast -crf 27 -c:a aac -b:a 128k "${outPath}"`;
 
-          // Comando otimizado para Railway (mais rápido e gasta menos CPU)
-          const ffmpegCmd = `ffmpeg -ss ${startTime} -t ${clipDuration} -i "${inputPath}" -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" -c:v libx264 -preset superfast -crf 28 -c:a aac -b:a 64k -y "${outPath}"`;
-
-          await execPromise(ffmpegCmd, { timeout: 60000 }); // 60s timeout por clipe
+          await execPromise(ffmpegCmd, { timeout: 180000 }); // 3 min por clipe máx
 
           generatedClips.push({
             id: clipID,
-            title: `Viral Clip #${i + 1} (${Math.floor(startTime)}s)`,
+            title: `Clipe Viral #${i + 1}`,
             videoUrl: `/temp/${outName}`,
-            thumbnail: "https://images.unsplash.com/photo-1485846234645-a62644f84728?w=400",
-            duration: Math.floor(clipDuration).toString()
+            thumbnail: "https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?w=400",
+            duration: targetDuration.toString()
           });
 
-          const progressPercent = Math.round(((i + 1) / TOTAL_CLIPS_TARGET) * 100);
+          const progress = Math.round(((i + 1) / TOTAL_CLIPS) * 100);
           await pool.query(
-            'UPDATE jobs SET progress = $1, current_clip = $2, clips = $3 WHERE id = $4',
-            [progressPercent, i + 1, JSON.stringify(generatedClips), jobID]
+            'UPDATE jobs SET progress = $1, current_clip = $2, clips = $3, status = $4 WHERE id = $5',
+            [progress, i + 1, JSON.stringify(generatedClips), 'processing', jobID]
           );
         }
 
         await pool.query('UPDATE jobs SET status = $1, progress = 100 WHERE id = $2', ['completed', jobID]);
-        console.log(`✅ Pack Finalizado com Sucesso para o Job ${jobID}`);
+        console.log(`✅ JOB ${jobID} COMPLETO.`);
 
-      } catch (e) {
-        console.error(`❌ Erro Processamento Job ${jobID}:`, e.message);
+      } catch (innerError) {
+        console.error(`❌ ERRO NO MOTOR (Job ${jobID}):`, innerError.message);
         await pool.query('UPDATE jobs SET status = $1 WHERE id = $2', ['error', jobID]);
       } finally {
-        if (fs.existsSync(inputPath)) {
-          try { fs.unlinkSync(inputPath); } catch (err) { console.error("Erro ao deletar original:", err); }
-        }
+        if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
       }
     })();
+
   } catch (e) {
-    console.error("Erro API principal:", e.message);
-    res.status(500).json({ error: e.message });
+    console.error("Erro na rota de geração:", e.message);
+    res.status(500).json({ error: "Falha ao iniciar o motor de vídeo." });
   }
 });
 
@@ -180,10 +174,7 @@ app.post('/api/register', async (req, res) => {
       [id, name, email, password, 70, 'USER', 'FREE']
     );
     res.json(result.rows[0]);
-  } catch (e) {
-    if (e.code === '23505') return res.status(400).json({ error: "Email já cadastrado." });
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: "E-mail já cadastrado." }); }
 });
 
 app.get('/api/users', async (req, res) => {
@@ -197,12 +188,10 @@ app.put('/api/users/:id/credits', async (req, res) => {
 });
 
 app.get('/api/jobs/:id', async (req, res) => {
-  try {
-    const r = await pool.query('SELECT * FROM jobs WHERE id = $1', [req.params.id]);
-    res.json(r.rows[0] || { status: 'not_found' });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  const r = await pool.query('SELECT * FROM jobs WHERE id = $1', [req.params.id]);
+  res.json(r.rows[0] || { status: 'not_found' });
 });
 
 app.get('*', (req, res) => res.sendFile(path.join(DIST_PATH, 'index.html')));
 
-app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Motor V10-Ultra Robust rodando na porta ${PORT}`));
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Motor V12 Online na porta ${PORT}`));

@@ -11,9 +11,11 @@ const ClipGenerator: React.FC = () => {
   const [clips, setClips] = useState<Clip[]>([]);
   const [jobProgress, setJobProgress] = useState({ percent: 0, current: 0, total: 10, status: '' });
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [rangeStart, setRangeStart] = useState<number>(0);
   const [rangeEnd, setRangeEnd] = useState<number>(600);
+  const [clipDuration, setClipDuration] = useState<number>(15);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
@@ -23,22 +25,25 @@ const ClipGenerator: React.FC = () => {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setSelectedFile(e.target.files[0]);
+      setErrorMsg(null);
     }
   };
 
   const handleGenerate = async () => {
-    if (!selectedFile) return alert("Por favor, selecione um arquivo de vídeo.");
+    if (!selectedFile) return alert("Por favor, selecione um vídeo.");
     if (user.credits < 10) return navigate('/planos');
     if (rangeEnd <= rangeStart) return alert("O tempo final deve ser maior que o inicial.");
 
     setIsProcessing(true);
-    setJobProgress({ percent: 0, current: 0, total: 10, status: 'Iniciando Motor...' });
+    setErrorMsg(null);
+    setJobProgress({ percent: 0, current: 0, total: 10, status: 'Iniciando Motor Nitro...' });
 
     try {
-      const generated = await api.generateClips(user.id, selectedFile, rangeStart, rangeEnd, (job) => {
-        let statusMsg = job.status === 'processing'
-          ? `Renderizando Clipe ${job.current_clip} de 10...`
-          : 'Analisando vídeo e ganchos...';
+      const generated = await api.generateClips(user.id, selectedFile, rangeStart, rangeEnd, clipDuration, (job) => {
+        let statusMsg = '';
+        if (job.status === 'processing') statusMsg = `Renderizando Clipe ${job.current_clip} de 10...`;
+        else if (job.status === 'analyzing') statusMsg = 'Analisando vídeo...';
+        else if (job.status === 'error') throw new Error("O motor encontrou um problema técnico.");
 
         setJobProgress({
           percent: job.progress || 0,
@@ -50,8 +55,9 @@ const ClipGenerator: React.FC = () => {
 
       setClips(generated);
       refreshUser();
+      setIsProcessing(false);
     } catch (err: any) {
-      alert("Erro no Motor: " + err.message);
+      setErrorMsg(err.message || "Erro desconhecido no motor.");
       setIsProcessing(false);
     }
   };
@@ -96,12 +102,25 @@ const ClipGenerator: React.FC = () => {
       <main className="flex-grow p-6 md:p-10 md:ml-72">
         <div className="max-w-5xl mx-auto">
           <header className="mb-12">
-            <h1 className="text-4xl font-black tracking-tight mb-2 italic">LABORATÓRIO VIRAL</h1>
+            <h1 className="text-4xl font-black tracking-tight mb-2 italic">ESTAÇÃO DE CORTE NITRO</h1>
             <div className="flex items-center gap-3">
-              <span className="bg-green-500 text-slate-950 text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-widest">Motor V10 Ativo</span>
-              <span className="text-slate-500 text-[10px] font-black uppercase tracking-widest">Cortes de 15 segundos</span>
+              <span className="bg-green-500 text-slate-950 text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-widest">Motor V12 Ativado</span>
+              <span className="text-slate-500 text-[10px] font-black uppercase tracking-widest">Seek Rápido Ativo</span>
             </div>
           </header>
+
+          {errorMsg && (
+            <div className="bg-red-500/10 border border-red-500/50 text-red-500 p-6 rounded-[32px] mb-8 flex items-center justify-between animate-in slide-in-from-top-4 duration-300">
+              <div className="flex items-center gap-4">
+                <i className="fa-solid fa-triangle-exclamation text-2xl"></i>
+                <div>
+                  <p className="font-black text-sm uppercase">Falha no Processamento</p>
+                  <p className="text-xs opacity-80">{errorMsg}</p>
+                </div>
+              </div>
+              <button onClick={() => setErrorMsg(null)} className="text-xs font-black underline uppercase">Tentar Novamente</button>
+            </div>
+          )}
 
           {!isProcessing && clips.length === 0 && (
             <div className="bg-slate-900 border border-slate-800 rounded-[40px] p-8 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -110,39 +129,52 @@ const ClipGenerator: React.FC = () => {
                 className={`border-2 border-dashed rounded-3xl p-16 flex flex-col items-center justify-center cursor-pointer transition-all ${selectedFile ? 'border-green-500 bg-green-500/5' : 'border-slate-800 hover:border-slate-700 bg-slate-950'}`}
               >
                 <input type="file" ref={fileInputRef} className="hidden" accept="video/*" onChange={handleFileChange} />
-                <i className={`fa-solid ${selectedFile ? 'fa-circle-check text-green-500' : 'fa-film text-slate-700'} text-5xl mb-4`}></i>
-                <p className="text-lg font-bold text-slate-400">{selectedFile ? selectedFile.name : 'Selecione o vídeo original para cortar'}</p>
+                <i className={`fa-solid ${selectedFile ? 'fa-check-circle text-green-500' : 'fa-clapperboard text-slate-700'} text-5xl mb-4`}></i>
+                <p className="text-lg font-bold text-slate-400">{selectedFile ? selectedFile.name : 'Clique para subir seu vídeo'}</p>
               </div>
 
               {selectedFile && (
-                <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-8 p-8 bg-slate-950 rounded-3xl border border-slate-800 animate-in zoom-in duration-300">
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-end">
-                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Início do Intervalo</label>
-                      <span className="text-green-500 font-mono font-bold">{formatSeconds(rangeStart)}</span>
+                <div className="mt-8 space-y-8 p-8 bg-slate-950 rounded-3xl border border-slate-800 animate-in zoom-in duration-300">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-end">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Analisar a partir de</label>
+                        <span className="text-green-500 font-mono font-bold">{formatSeconds(rangeStart)}</span>
+                      </div>
+                      <input
+                        type="range" min="0" max="3600" value={rangeStart}
+                        onChange={(e) => setRangeStart(parseInt(e.target.value))}
+                        className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-green-500"
+                      />
+                    </div>
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-end">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Analisar até</label>
+                        <span className="text-green-500 font-mono font-bold">{formatSeconds(rangeEnd)}</span>
+                      </div>
+                      <input
+                        type="range" min="0" max="3600" value={rangeEnd}
+                        onChange={(e) => setRangeEnd(parseInt(e.target.value))}
+                        className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-green-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="pt-4 border-t border-slate-800">
+                    <div className="flex justify-between items-center mb-4">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Duração de cada clipe</label>
+                      <span className="bg-green-500 text-slate-950 px-3 py-1 rounded-full text-xs font-black">{clipDuration} Segundos</span>
                     </div>
                     <input
-                      type="range" min="0" max="3600" value={rangeStart}
-                      onChange={(e) => setRangeStart(parseInt(e.target.value))}
-                      className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-green-500"
+                      type="range" min="15" max="59" value={clipDuration}
+                      onChange={(e) => setClipDuration(parseInt(e.target.value))}
+                      className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-green-500"
                     />
-                  </div>
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-end">
-                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Fim do Intervalo</label>
-                      <span className="text-green-500 font-mono font-bold">{formatSeconds(rangeEnd)}</span>
+                    <div className="flex justify-between text-[10px] text-slate-600 font-bold mt-2 px-1">
+                      <span>15s</span>
+                      <span>30s (Ideal)</span>
+                      <span>59s</span>
                     </div>
-                    <input
-                      type="range" min="0" max="3600" value={rangeEnd}
-                      onChange={(e) => setRangeEnd(parseInt(e.target.value))}
-                      className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-green-500"
-                    />
-                  </div>
-                  <div className="md:col-span-2 flex items-center gap-4 bg-green-500/5 p-4 rounded-2xl border border-green-500/10">
-                    <i className="fa-solid fa-wand-magic-sparkles text-green-500"></i>
-                    <p className="text-xs text-slate-400 font-medium leading-relaxed">
-                      O motor irá extrair automaticamente <span className="text-white font-bold">10 cortes estratégicos</span> entre os tempos selecionados.
-                    </p>
                   </div>
                 </div>
               )}
@@ -152,9 +184,9 @@ const ClipGenerator: React.FC = () => {
                 disabled={!selectedFile}
                 className="w-full mt-8 bg-green-500 hover:bg-green-400 disabled:opacity-50 disabled:hover:bg-green-500 text-slate-950 font-black text-xl py-6 rounded-3xl transition-all shadow-2xl flex items-center justify-center gap-3 active:scale-[0.98]"
               >
-                GERAR MEU PACK DE 10 CLIPES
+                CORTAR 10 CLIPES AGORA
               </button>
-              <p className="text-center mt-4 text-[10px] text-slate-500 font-bold uppercase tracking-widest">Custo: 10 Créditos • Processamento Real-Time</p>
+              <p className="text-center mt-4 text-[10px] text-slate-500 font-bold uppercase tracking-widest">Custo: 10 Créditos • Otimizado para Shorts e Reels</p>
             </div>
           )}
 
@@ -165,20 +197,20 @@ const ClipGenerator: React.FC = () => {
                 <div className="absolute inset-0 border-[6px] border-green-500 rounded-full border-t-transparent animate-spin"></div>
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
                   <span className="text-5xl font-black">{jobProgress.percent}%</span>
-                  <span className="text-[10px] font-bold text-slate-500 uppercase mt-1">{jobProgress.current} de 10</span>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase mt-1">Clipe {jobProgress.current}</span>
                 </div>
               </div>
               <h2 className="text-3xl font-black mb-3 tracking-tighter uppercase italic text-green-500">{jobProgress.status}</h2>
-              <p className="text-slate-500 max-w-sm mx-auto text-sm font-medium">Nossa IA está recortando os melhores momentos. Isso pode levar alguns minutos dependendo do tamanho do vídeo.</p>
+              <p className="text-slate-500 max-w-sm mx-auto text-sm font-medium">Extraindo os melhores momentos em formato vertical. Por favor, mantenha esta página aberta.</p>
             </div>
           )}
 
           {clips.length > 0 && (
             <div className="animate-in fade-in slide-in-from-bottom-8 duration-700">
-              <div className="flex justify-between items-center mb-8 bg-slate-900 p-6 rounded-3xl border border-slate-800">
+              <div className="flex justify-between items-center mb-8 bg-slate-900 p-6 rounded-3xl border border-slate-800 shadow-2xl">
                 <div>
-                  <h2 className="text-2xl font-black text-white italic tracking-tighter">PACK GERADO COM SUCESSO! 🚀</h2>
-                  <p className="text-xs text-slate-500 font-bold uppercase">10 clipes prontos para suas redes sociais</p>
+                  <h2 className="text-2xl font-black text-white italic tracking-tighter">SUCESSO! 10 CLIPES GERADOS</h2>
+                  <p className="text-xs text-slate-500 font-bold uppercase">Duração: {clipDuration}s cada clipe</p>
                 </div>
                 <button onClick={() => { setClips([]); setSelectedFile(null); setIsProcessing(false); }} className="bg-white text-slate-950 px-6 py-2 rounded-xl text-xs font-black hover:bg-slate-200 transition">NOVO PROJETO</button>
               </div>
@@ -196,7 +228,7 @@ const ClipGenerator: React.FC = () => {
                       <div className="absolute top-4 left-4 bg-green-500 text-slate-950 text-[10px] font-black px-2 py-0.5 rounded">#{idx + 1}</div>
                     </div>
                     <div className="p-4 bg-slate-950">
-                      <a href={clip.videoUrl} download className="block w-full text-center bg-slate-900 border border-slate-800 py-3 rounded-2xl text-[10px] font-black hover:bg-green-500 hover:text-slate-950 transition-all">BAIXAR CLIPE</a>
+                      <a href={clip.videoUrl} download className="block w-full text-center bg-slate-900 border border-slate-800 py-3 rounded-2xl text-[10px] font-black hover:bg-green-500 hover:text-slate-950 transition-all">BAIXAR MP4</a>
                     </div>
                   </div>
                 ))}

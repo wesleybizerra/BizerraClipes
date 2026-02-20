@@ -82,12 +82,13 @@ export const api = {
     return userId ? allClips.filter((c: any) => c.userId === userId) : allClips;
   },
 
-  generateClips: async (userId: string, videoFile: File, startTime: number, endTime: number, onProgress?: (data: any) => void): Promise<Clip[]> => {
+  generateClips: async (userId: string, videoFile: File, startTime: number, endTime: number, clipDuration: number, onProgress?: (data: any) => void): Promise<Clip[]> => {
     const formData = new FormData();
     formData.append('video', videoFile);
     formData.append('userId', userId);
     formData.append('startTime', startTime.toString());
     formData.append('endTime', endTime.toString());
+    formData.append('clipDuration', clipDuration.toString());
 
     const startResponse = await fetch(`${BACKEND_URL}/api/generate-real-clips`, {
       method: 'POST',
