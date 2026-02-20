@@ -1,31 +1,26 @@
-# Estágio de Build para o Frontend React
-FROM node:20 AS build-stage
+# Stage 1: Build the frontend
+FROM node:20-slim AS build-stage
 WORKDIR /app
 COPY package*.json ./
 RUN npm install
 COPY . .
 RUN npm run build
-# Estágio de Produção: Servidor Node.js unificado
+# Stage 2: Production environment
 FROM node:20-slim
 WORKDIR /app
-# Instalação do FFmpeg para o processamento de vídeos (Motor V10)
-RUN apt-get update && \
-    apt-get install -y ffmpeg && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
-# Instalação apenas das dependências de produção do backend
-COPY package*.json ./
-RUN npm install --omit=dev
-# Copia o código do servidor unificado
-COPY server.js ./
-# Copia o frontend buildado do estágio anterior para ser servido pelo Express
+# Install FFmpeg and essential tools for the Bizerra Nitro Engine
+RUN apt-get update && apt-get install -y ffmpeg python3 make g++ && rm -rf /var/lib/apt/lists/*
+# Copy build artifacts and server files from build-stage
 COPY --from=build-stage /app/dist ./dist
-# Garante que o diretório temporário para uploads exista e tenha permissões
+COPY --from=build-stage /app/package*.json ./
+COPY --from=build-stage /app/server.js ./
+# Install only production dependencies
+RUN npm install --omit=dev
+# Configure temporary directory for video processing
 RUN mkdir -p temp && chmod 777 temp
-# Configurações de ambiente para o Railway
-ENV PORT=8080
+# Environment variables for Railway optimization
 ENV NODE_ENV=production
-# Expõe a porta configurada
+ENV PORT=8080
 EXPOSE 8080
-# Comando para iniciar o Motor Bizerra
+# Start the Nitro Motor
 CMD ["node", "server.js"]

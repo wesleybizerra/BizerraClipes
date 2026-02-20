@@ -18,7 +18,7 @@ export const api = {
       body: JSON.stringify({ email, password })
     });
     if (!response.ok) {
-      const err = await response.json().catch(() => ({ error: "Erro desconhecido no servidor." }));
+      const err = await response.json().catch(() => ({ error: "Erro desconhecido." }));
       throw new Error(err.error || "Erro ao realizar login.");
     }
     return await response.json();
@@ -66,6 +66,7 @@ export const api = {
 
   getJobStatus: async (jobId: string): Promise<any> => {
     const response = await fetch(`${BACKEND_URL}/api/jobs/${jobId}`);
+    if (!response.ok) throw new Error("Servidor ocupado...");
     return await response.json();
   },
 
@@ -96,17 +97,22 @@ export const api = {
     });
 
     if (!startResponse.ok) {
-      const err = await startResponse.json().catch(() => ({ error: "O Motor não respondeu adequadamente." }));
+      const err = await startResponse.json().catch(() => ({ error: "O Motor não respondeu." }));
       throw new Error(err.error);
     }
 
     const { jobId } = await startResponse.json();
+    let retryCount = 0;
+    const MAX_RETRIES = 5;
 
     return new Promise((resolve, reject) => {
       const check = async () => {
         try {
           const job = await api.getJobStatus(jobId);
+          retryCount = 0; // Reseta retentativas se o servidor respondeu
+
           if (onProgress) onProgress(job);
+
           if (job.status === 'completed') {
             const realClips = job.clips.map((c: any) => ({
               ...c,
@@ -116,12 +122,18 @@ export const api = {
             await api.updateUserCredits(userId, -10);
             resolve(realClips);
           } else if (job.status === 'error') {
-            reject(new Error("O Motor falhou ao processar o vídeo."));
+            reject(new Error("O Motor falhou ao processar os cortes."));
           } else {
-            setTimeout(check, 3000);
+            setTimeout(check, 4000); // Polling a cada 4s para ser mais leve
           }
         } catch (e) {
-          reject(new Error("Conexão perdida com o motor."));
+          retryCount++;
+          if (retryCount >= MAX_RETRIES) {
+            reject(new Error("Conexão instável com o motor. Verifique os logs do Railway."));
+          } else {
+            console.warn(`Tentativa de reconexão ${retryCount}/${MAX_RETRIES}...`);
+            setTimeout(check, 5000);
+          }
         }
       };
       check();

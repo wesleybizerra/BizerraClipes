@@ -5,7 +5,14 @@ dockerfilePath = "Dockerfile"
 [deploy]
 startCommand = "node server.js"
 restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 10
+restartPolicyMaxRetries = 5
+
+# Aumentar timeouts pois o processamento de vídeo trava o event loop por milissegundos
 healthcheckPath = "/health"
-healthcheckTimeout = 120
-serviceName = "bizerraclipes-motor"
+healthcheckTimeout = 300
+healthcheckInterval = 30
+serviceName = "bizerra-motor-v13"
+
+[env]
+NODE_ENV = "production"
+PORT = "8080"
