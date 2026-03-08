@@ -15,4 +15,4 @@ serviceName = "bizerra-motor-v13"
 
 [env]
 NODE_ENV = "production"
-PORT = "8080"
+PORT = "3000"

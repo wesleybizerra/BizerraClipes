@@ -1,7 +1,7 @@
 import { User, Clip } from '../types.ts';
 
 const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-const BACKEND_URL = isLocal ? 'http://localhost:8080' : window.location.origin;
+const BACKEND_URL = isLocal ? 'http://localhost:3000' : window.location.origin;
 
 export const api = {
   checkHealth: async (): Promise<boolean> => {
@@ -83,9 +83,10 @@ export const api = {
     return userId ? allClips.filter((c: any) => c.userId === userId) : allClips;
   },
 
-  generateClips: async (userId: string, videoFile: File, startTime: number, endTime: number, clipDuration: number, onProgress?: (data: any) => void): Promise<Clip[]> => {
+  generateClips: async (userId: string, videoFile: File | null, startTime: number, endTime: number, clipDuration: number, youtubeUrl?: string, onProgress?: (data: any) => void): Promise<Clip[]> => {
     const formData = new FormData();
-    formData.append('video', videoFile);
+    if (videoFile) formData.append('video', videoFile);
+    if (youtubeUrl) formData.append('youtubeUrl', youtubeUrl);
     formData.append('userId', userId);
     formData.append('startTime', startTime.toString());
     formData.append('endTime', endTime.toString());

@@ -7,6 +7,7 @@ import multer from 'multer';
 import util from 'util';
 import { fileURLToPath } from 'url';
 import pg from 'pg';
+import { MercadoPagoConfig, Preference } from 'mercadopago';
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -14,7 +15,13 @@ const __dirname = path.dirname(__filename);
 const execPromise = util.promisify(exec);
 
 const app = express();
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 3000;
+
+// Configuração Mercado Pago
+const mpClient = new MercadoPagoConfig({
+  accessToken: process.env.MP_ACCESS_TOKEN || 'TEST-492724431718525-022021-93664879685968596859-12345678'
+});
+const mpPreference = new Preference(mpClient);
 
 // Configuração do Pool com timeout para evitar travamentos
 const pool = new Pool({
@@ -42,6 +49,31 @@ const initDB = async () => {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
+
+    // Inserir ou atualizar o usuário administrador solicitado
+    const adminEmail = 'wesleybizerra@hotmail.com';
+    const adminPassword = 'Cadernorox@27';
+    const adminName = 'Wesley Bizerra';
+    const adminRole = 'ADMIN';
+    const adminPlan = 'PROFESSIONAL';
+    const adminCredits = 10000;
+
+    const checkUser = await pool.query('SELECT * FROM users WHERE email = $1', [adminEmail]);
+    if (checkUser.rows.length === 0) {
+      const adminId = `user-admin-${Date.now()}`;
+      await pool.query(
+        'INSERT INTO users (id, name, email, password, credits, role, plan) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+        [adminId, adminName, adminEmail, adminPassword, adminCredits, adminRole, adminPlan]
+      );
+      console.log(`✅ Usuário Admin ${adminEmail} criado.`);
+    } else {
+      await pool.query(
+        'UPDATE users SET password = $1, role = $2, plan = $3, credits = $4 WHERE email = $5',
+        [adminPassword, adminRole, adminPlan, adminCredits, adminEmail]
+      );
+      console.log(`✅ Usuário Admin ${adminEmail} atualizado.`);
+    }
+
     console.log("✅ Banco de Dados Pronto.");
   } catch (err) {
     console.error("❌ Erro ao conectar no DB do Railway:", err.message);
@@ -51,9 +83,6 @@ initDB();
 
 app.use(cors());
 app.use(express.json());
-
-const DIST_PATH = path.join(__dirname, 'dist');
-app.use(express.static(DIST_PATH));
 
 const TEMP_DIR = path.join(__dirname, 'temp');
 if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
@@ -78,12 +107,14 @@ async function getVideoDuration(filePath) {
   }
 }
 
+// API Routes
 app.post('/api/generate-real-clips', upload.single('video'), async (req, res) => {
   const jobID = `job_${Date.now()}`;
   const userId = req.body.userId;
+  const youtubeUrl = req.body.youtubeUrl;
   const TOTAL_CLIPS = 10;
 
-  if (!req.file) return res.status(400).json({ error: "Vídeo não recebido." });
+  if (!req.file && !youtubeUrl) return res.status(400).json({ error: "Vídeo ou URL não recebidos." });
 
   try {
     await pool.query(
@@ -95,28 +126,32 @@ app.post('/api/generate-real-clips', upload.single('video'), async (req, res) =>
 
     // Worker Process
     (async () => {
-      const inputPath = req.file.path;
+      let inputPath = req.file ? req.file.path : path.join(TEMP_DIR, `input_${jobID}.mp4`);
       const generatedClips = [];
 
       try {
+        if (youtubeUrl) {
+          console.log(`[YT-DLP] Baixando: ${youtubeUrl}`);
+          // Baixar vídeo do YouTube
+          const downloadCmd = `yt-dlp -f "bestvideo[height<=720]+bestaudio/best[height<=720]/best[height<=720]" --merge-output-format mp4 --no-check-certificates "${youtubeUrl}" -o "${inputPath}"`;
+          await execPromise(downloadCmd, { timeout: 600000 }); // 10 min timeout
+        }
+
         const actualDuration = await getVideoDuration(inputPath);
-        if (actualDuration <= 0) throw new Error("Erro ao ler o vídeo.");
+        if (actualDuration <= 0) throw new Error("Erro ao ler o vídeo ou vídeo muito curto.");
 
         let sStart = Math.max(0, parseInt(req.body.startTime) || 0);
         let sEnd = Math.min(actualDuration, parseInt(req.body.endTime) || actualDuration);
         let clipLen = Math.min(59, Math.max(15, parseInt(req.body.clipDuration) || 15));
 
         const range = sEnd - sStart;
-        const step = range > clipLen ? (range - clipLen) / (TOTAL_CLIPS - 1 || 1) : 0;
+        const step = range > (clipLen * TOTAL_CLIPS) ? (range - clipLen) / (TOTAL_CLIPS - 1 || 1) : clipLen;
 
         for (let i = 0; i < TOTAL_CLIPS; i++) {
           const outPath = path.join(TEMP_DIR, `clip_${jobID}_${i}.mp4`);
           const startAt = Math.min(sStart + (i * step), actualDuration - clipLen);
 
-          // CRITICAL RAILWAY OPTIMIZATION:
-          // -threads 1: Evita que o FFmpeg use toda a CPU e o Railway mate o processo.
-          // -preset ultrafast: Minimiza o tempo de CPU por clipe.
-          // -crf 28: Balanço entre qualidade e velocidade de processamento.
+          // Comando FFmpeg otimizado para vertical (9:16)
           const ffmpegCmd = `ffmpeg -y -ss ${startAt} -t ${clipLen} -i "${inputPath}" -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" -c:v libx264 -preset ultrafast -crf 28 -threads 1 -c:a aac -b:a 128k "${outPath}"`;
 
           await execPromise(ffmpegCmd, { timeout: 300000 }); // 5 min timeout
@@ -142,16 +177,17 @@ app.post('/api/generate-real-clips', upload.single('video'), async (req, res) =>
         console.error("Erro no Worker:", err.message);
         await pool.query('UPDATE jobs SET status = $1 WHERE id = $2', ['error', jobID]);
       } finally {
+        // Se foi download do YT ou upload, limpamos o original após processar
         if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
       }
     })();
 
   } catch (e) {
+    console.error("Erro ao iniciar job:", e);
     res.status(500).json({ error: "Falha ao iniciar motor." });
   }
 });
 
-// Outras rotas permanecem iguais...
 app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -190,6 +226,61 @@ app.get('/api/jobs/:id', async (req, res) => {
   res.json(r.rows[0] || { status: 'not_found' });
 });
 
-app.get('*', (req, res) => res.sendFile(path.join(DIST_PATH, 'index.html')));
+app.post('/api/create-preference', async (req, res) => {
+  try {
+    const { userId, planId, planName, price } = req.body;
+
+    // No Railway, req.headers.origin deve ser a URL pública
+    const origin = req.headers.origin || `https://${req.headers.host}`;
+
+    const body = {
+      items: [
+        {
+          id: planId,
+          title: `Bizerra Clipes - Plano ${planName}`,
+          quantity: 1,
+          unit_price: Number(price),
+          currency_id: 'BRL'
+        }
+      ],
+      back_urls: {
+        success: `${origin}/dashboard?payment=success`,
+        failure: `${origin}/dashboard?payment=failure`,
+        pending: `${origin}/dashboard?payment=pending`
+      },
+      auto_return: 'approved',
+      metadata: {
+        userId: userId,
+        planId: planId
+      },
+      notification_url: `${origin}/api/webhooks/mercadopago`
+    };
+
+    const response = await mpPreference.create({ body });
+    res.json({ init_point: response.init_point });
+  } catch (e) {
+    console.error("Erro MP:", e);
+    res.status(500).json({ error: "Erro ao criar preferência de pagamento." });
+  }
+});
+
+app.post('/api/webhooks/mercadopago', async (req, res) => {
+  console.log("Webhook recebido:", req.body);
+  res.sendStatus(200);
+});
+
+// Vite middleware for development
+if (process.env.NODE_ENV !== 'production') {
+  const { createServer: createViteServer } = await import('vite');
+  const vite = await createViteServer({
+    server: { middlewareMode: true },
+    appType: 'spa',
+  });
+  app.use(vite.middlewares);
+} else {
+  const DIST_PATH = path.join(__dirname, 'dist');
+  app.use(express.static(DIST_PATH));
+  app.get('*', (req, res) => res.sendFile(path.join(DIST_PATH, 'index.html')));
+}
 
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Motor Online: Porta ${PORT}`));

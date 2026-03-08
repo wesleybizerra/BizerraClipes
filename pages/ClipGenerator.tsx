@@ -7,6 +7,7 @@ import { Clip } from '../types';
 const ClipGenerator: React.FC = () => {
   const { user, refreshUser } = useAuth();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [youtubeUrl, setYoutubeUrl] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [clips, setClips] = useState<Clip[]>([]);
   const [jobProgress, setJobProgress] = useState({ percent: 0, current: 0, total: 10, status: '' });
@@ -30,7 +31,7 @@ const ClipGenerator: React.FC = () => {
   };
 
   const handleGenerate = async () => {
-    if (!selectedFile) return alert("Por favor, selecione um vídeo.");
+    if (!selectedFile && !youtubeUrl) return alert("Por favor, selecione um vídeo ou cole um link do YouTube.");
     if (user.credits < 10) return navigate('/planos');
     if (rangeEnd <= rangeStart) return alert("O tempo final deve ser maior que o inicial.");
 
@@ -39,7 +40,7 @@ const ClipGenerator: React.FC = () => {
     setJobProgress({ percent: 0, current: 0, total: 10, status: 'Iniciando Motor Nitro...' });
 
     try {
-      const generated = await api.generateClips(user.id, selectedFile, rangeStart, rangeEnd, clipDuration, (job) => {
+      const generated = await api.generateClips(user.id, selectedFile, rangeStart, rangeEnd, clipDuration, youtubeUrl, (job) => {
         let statusMsg = '';
         if (job.status === 'processing') statusMsg = `Renderizando Clipe ${job.current_clip} de 10...`;
         else if (job.status === 'analyzing') statusMsg = 'Analisando vídeo...';
@@ -124,16 +125,38 @@ const ClipGenerator: React.FC = () => {
 
           {!isProcessing && clips.length === 0 && (
             <div className="bg-slate-900 border border-slate-800 rounded-[40px] p-8 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="mb-8">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 block">Link do YouTube</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Cole o link do vídeo aqui..."
+                    value={youtubeUrl}
+                    onChange={(e) => { setYoutubeUrl(e.target.value); if (e.target.value) setSelectedFile(null); }}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 px-6 text-sm font-medium focus:border-green-500 outline-none transition-all pr-12"
+                  />
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-700">
+                    <i className="fa-brands fa-youtube text-xl"></i>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4 mb-8">
+                <div className="h-px bg-slate-800 flex-grow"></div>
+                <span className="text-[10px] font-black text-slate-700 uppercase tracking-widest">OU</span>
+                <div className="h-px bg-slate-800 flex-grow"></div>
+              </div>
+
               <div
                 onClick={() => fileInputRef.current?.click()}
                 className={`border-2 border-dashed rounded-3xl p-16 flex flex-col items-center justify-center cursor-pointer transition-all ${selectedFile ? 'border-green-500 bg-green-500/5' : 'border-slate-800 hover:border-slate-700 bg-slate-950'}`}
               >
-                <input type="file" ref={fileInputRef} className="hidden" accept="video/*" onChange={handleFileChange} />
+                <input type="file" ref={fileInputRef} className="hidden" accept="video/*" onChange={(e) => { handleFileChange(e); if (e.target.files?.[0]) setYoutubeUrl(''); }} />
                 <i className={`fa-solid ${selectedFile ? 'fa-check-circle text-green-500' : 'fa-clapperboard text-slate-700'} text-5xl mb-4`}></i>
                 <p className="text-lg font-bold text-slate-400">{selectedFile ? selectedFile.name : 'Clique para subir seu vídeo'}</p>
               </div>
 
-              {selectedFile && (
+              {(selectedFile || youtubeUrl) && (
                 <div className="mt-8 space-y-8 p-8 bg-slate-950 rounded-3xl border border-slate-800 animate-in zoom-in duration-300">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="space-y-4">
@@ -181,7 +204,7 @@ const ClipGenerator: React.FC = () => {
 
               <button
                 onClick={handleGenerate}
-                disabled={!selectedFile}
+                disabled={!selectedFile && !youtubeUrl}
                 className="w-full mt-8 bg-green-500 hover:bg-green-400 disabled:opacity-50 disabled:hover:bg-green-500 text-slate-950 font-black text-xl py-6 rounded-3xl transition-all shadow-2xl flex items-center justify-center gap-3 active:scale-[0.98]"
               >
                 CORTAR 10 CLIPES AGORA
