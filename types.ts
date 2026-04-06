@@ -19,6 +19,7 @@ export interface User {
   credits: number;
   role: UserRole;
   plan: SubscriptionPlan;
+  last_reward_at?: string;
   createdAt: string;
 }
 
